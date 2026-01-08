@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Participant } from '../context/GameContext';
-import { VotingResults } from './VotingResults';
 
 // ============================================================
 // TYPES & ENUMS
@@ -336,12 +335,6 @@ export const Table: React.FC<TableProps> = ({
                 })}
 
             </motion.div>
-
-            {/* VOTING RESULTS - Shows after reveal */}
-            <VotingResults
-                participants={participants}
-                isVisible={areCardsRevealed && phase === 'IDLE'}
-            />
         </div>
     );
 };

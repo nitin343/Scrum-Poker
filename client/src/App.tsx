@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useGame } from './context/GameContext';
 import { Table } from './components/Table';
 import { CardDeck } from './components/CardDeck';
+import { VotingResults } from './components/VotingResults';
 
 function App() {
   const {
@@ -284,38 +285,58 @@ function App() {
         </motion.div>
       </main>
 
-      {/* === ESTIMATION CONTROLS (Fixed Bottom) === */}
-      <motion.div
-        className="fixed bottom-0 left-0 right-0 z-40"
-        initial={{ y: 100 }}
-        animate={{ y: room.areCardsRevealed ? 200 : 0 }}
-        transition={{ duration: 0.4, ease: 'easeInOut' }}
-      >
-        <div className="glass border-t border-white/10 py-5 px-4">
+      {/* === BOTTOM PANEL (Fixed) === */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <div className={`py-4 px-4 ${room.areCardsRevealed ? '' : 'glass border-t border-white/10'}`}>
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Choose Your Estimate</h3>
-              <AnimatePresence>
-                {myParticipant?.selectedCard && (
-                  <motion.span
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="text-[10px] font-semibold text-purple-400 bg-purple-500/20 px-3 py-1 rounded-full border border-purple-500/30"
-                  >
-                    ✓ Selected: {myParticipant.selectedCard}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
-            <CardDeck
-              selectedValue={myParticipant?.selectedCard}
-              onSelect={selectCard}
-              disabled={room.areCardsRevealed}
-            />
+            <AnimatePresence mode="wait">
+              {room.areCardsRevealed ? (
+                <motion.div
+                  key="voting-results"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <VotingResults
+                    participants={room.participants}
+                    isVisible={true}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="card-deck"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Choose Your Estimate</h3>
+                    <AnimatePresence>
+                      {myParticipant?.selectedCard && (
+                        <motion.span
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="text-[10px] font-semibold text-purple-400 bg-purple-500/20 px-3 py-1 rounded-full border border-purple-500/30"
+                        >
+                          ✓ Selected: {myParticipant.selectedCard}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <CardDeck
+                    selectedValue={myParticipant?.selectedCard}
+                    onSelect={selectCard}
+                    disabled={room.areCardsRevealed}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

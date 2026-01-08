@@ -57,19 +57,19 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
 
     if (!isVisible || voteData.distribution.length === 0) return null;
 
-    const maxBarHeight = 80; // Max height in pixels
+    const maxBarHeight = 50; // Smaller max height
 
     return (
         <AnimatePresence>
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="flex items-end justify-center gap-8 mt-8"
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="flex items-end justify-center gap-6"
             >
                 {/* Vote Distribution Bars */}
-                <div className="flex items-end gap-4">
+                <div className="flex items-end gap-2">
                     {voteData.distribution.map(([value, count]) => {
                         const barHeight = (count / voteData.maxVotes) * maxBarHeight;
                         return (
@@ -77,21 +77,21 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
                                 key={value}
                                 initial={{ opacity: 0, scaleY: 0 }}
                                 animate={{ opacity: 1, scaleY: 1 }}
-                                transition={{ duration: 0.5, delay: 0.2 }}
+                                transition={{ duration: 0.4, delay: 0.1 }}
                                 className="flex flex-col items-center"
                                 style={{ originY: 1 }}
                             >
                                 {/* Bar */}
                                 <div
-                                    className="w-3 rounded-t-full bg-slate-400 mb-2"
+                                    className="w-2 rounded-t-full bg-slate-400 mb-1"
                                     style={{ height: barHeight }}
                                 />
                                 {/* Card */}
-                                <div className="w-12 h-16 rounded-lg bg-white/95 flex items-center justify-center shadow-lg border border-slate-200">
-                                    <span className="font-bold text-xl text-slate-800">{value}</span>
+                                <div className="w-10 h-12 rounded-md bg-white/95 flex items-center justify-center shadow-md border border-slate-200">
+                                    <span className="font-bold text-base text-slate-800">{value}</span>
                                 </div>
                                 {/* Vote count */}
-                                <span className="text-xs text-slate-400 mt-2">
+                                <span className="text-[10px] text-slate-400 mt-1">
                                     {count} {count === 1 ? 'Vote' : 'Votes'}
                                 </span>
                             </motion.div>
@@ -100,44 +100,44 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
                 </div>
 
                 {/* Average & Agreement */}
-                <div className="flex flex-col items-center gap-4 ml-8">
+                <div className="flex items-center gap-6 ml-4">
                     {/* Average */}
                     {voteData.average !== null && (
                         <div className="text-center">
-                            <span className="text-sm text-slate-400 block">Average:</span>
-                            <span className="text-4xl font-black text-white">{voteData.average.toFixed(1)}</span>
+                            <span className="text-xs text-slate-400 block">Average</span>
+                            <span className="text-3xl font-black text-white">{voteData.average.toFixed(1)}</span>
                         </div>
                     )}
 
                     {/* Agreement */}
                     <div className="text-center">
-                        <span className="text-sm text-slate-400 block mb-2">Agreement:</span>
-                        <div className="relative w-14 h-14">
+                        <span className="text-xs text-slate-400 block mb-1">Agreement</span>
+                        <div className="relative w-11 h-11">
                             {/* Background circle */}
                             <svg className="w-full h-full -rotate-90">
                                 <circle
-                                    cx="28"
-                                    cy="28"
-                                    r="24"
+                                    cx="22"
+                                    cy="22"
+                                    r="18"
                                     fill="none"
                                     stroke="rgba(255,255,255,0.1)"
-                                    strokeWidth="4"
+                                    strokeWidth="3"
                                 />
                                 {/* Progress circle */}
                                 <circle
-                                    cx="28"
-                                    cy="28"
-                                    r="24"
+                                    cx="22"
+                                    cy="22"
+                                    r="18"
                                     fill="none"
                                     stroke={voteData.agreementPercent >= 80 ? '#10b981' : voteData.agreementPercent >= 50 ? '#f59e0b' : '#ef4444'}
-                                    strokeWidth="4"
+                                    strokeWidth="3"
                                     strokeLinecap="round"
-                                    strokeDasharray={`${(voteData.agreementPercent / 100) * 150.8} 150.8`}
+                                    strokeDasharray={`${(voteData.agreementPercent / 100) * 113.1} 113.1`}
                                 />
                             </svg>
-                            {/* Center icon/percent */}
+                            {/* Center percent */}
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xs font-bold text-white">{Math.round(voteData.agreementPercent)}%</span>
+                                <span className="text-[10px] font-bold text-white">{Math.round(voteData.agreementPercent)}%</span>
                             </div>
                         </div>
                     </div>
