@@ -7,12 +7,13 @@ export const setupSocket = (io: Server) => {
         console.log(`User connected: ${socket.id}`);
 
         // Join Room
-        socket.on('join_room', ({ roomId, userId, displayName, isScrumMaster }) => {
+        socket.on('join_room', ({ roomId, userId, displayName, isScrumMaster, roomName }) => {
             let room = getRoom(roomId);
 
             if (!room) {
                 if (isScrumMaster) {
-                    room = createRoom(roomId, userId, socket.id);
+                    // Create new room with provided name
+                    room = createRoom(roomId, userId, socket.id, roomName || 'Scrum Poker');
                     console.log(`Room created: ${roomId} by ${userId}`);
                 } else {
                     socket.emit('error', { message: 'Room does not exist' });
@@ -25,9 +26,10 @@ export const setupSocket = (io: Server) => {
                 userId,
                 socketId: socket.id,
                 displayName: displayName || 'Anonymous',
-                selectedCard: null,
-                hasVoted: false,
-                isScrumMaster: !!isScrumMaster
+                selectedCard: room.participants.get(userId)?.selectedCard || null, // Preserve card if reconnecting
+                hasVoted: room.participants.get(userId)?.hasVoted || false,
+                isScrumMaster: !!isScrumMaster,
+                isConnected: true
             });
 
             socket.join(roomId);
@@ -35,6 +37,7 @@ export const setupSocket = (io: Server) => {
             // Emit updated room state to all in room
             io.to(roomId).emit('room_update', {
                 roomId: room.roomId,
+                roomName: room.roomName,
                 participants: Array.from(room.participants.values()),
                 currentRound: room.currentRound,
                 areCardsRevealed: room.areCardsRevealed
@@ -94,8 +97,33 @@ export const setupSocket = (io: Server) => {
 
         socket.on('disconnect', () => {
             console.log(`User disconnected: ${socket.id}`);
-            // Handle cleanup if needed (remove user from room, etc.)
-            // For now, we keep them in store to allow reconnects, or could implement timeout
+
+            // Find room and participant by socketId to mark as disconnected
+            rooms.forEach((room) => {
+                let foundUserId: string | null = null;
+                for (const [uid, p] of room.participants.entries()) {
+                    if (p.socketId === socket.id) {
+                        foundUserId = uid;
+                        break;
+                    }
+                }
+
+                if (foundUserId) {
+                    const p = room.participants.get(foundUserId);
+                    if (p) {
+                        p.isConnected = false;
+                        console.log(`Marking user ${foundUserId} as offline`);
+
+                        io.to(room.roomId).emit('room_update', {
+                            roomId: room.roomId,
+                            roomName: room.roomName,
+                            participants: Array.from(room.participants.values()),
+                            currentRound: room.currentRound,
+                            areCardsRevealed: room.areCardsRevealed
+                        });
+                    }
+                }
+            });
         });
     });
 };

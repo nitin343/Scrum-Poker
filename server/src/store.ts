@@ -6,10 +6,12 @@ export interface Participant {
   selectedCard?: string | number | null; // null means not voted
   hasVoted: boolean;
   isScrumMaster: boolean;
+  isConnected: boolean;
 }
 
 export interface Room {
   roomId: string;
+  roomName: string;
   participants: Map<string, Participant>; // userId -> Participant
   currentRound: number;
   isRevealAllowed: boolean;
@@ -19,15 +21,16 @@ export interface Room {
 // In-memory store
 export const rooms = new Map<string, Room>();
 
-export const createRoom = (roomId: string, scuMasterId: string, socketId: string): Room => {
+export const createRoom = (roomId: string, scuMasterId: string, socketId: string, roomName: string = 'Scrum Poker'): Room => {
   const room: Room = {
     roomId,
+    roomName,
     participants: new Map(),
     currentRound: 1,
     isRevealAllowed: false,
     areCardsRevealed: false
   };
-  
+
   // Add Scrum Master as participant
   room.participants.set(scuMasterId, {
     userId: scuMasterId,
@@ -35,7 +38,8 @@ export const createRoom = (roomId: string, scuMasterId: string, socketId: string
     displayName: 'Scrum Master',
     selectedCard: null,
     hasVoted: false,
-    isScrumMaster: true
+    isScrumMaster: true,
+    isConnected: true
   });
 
   rooms.set(roomId, room);

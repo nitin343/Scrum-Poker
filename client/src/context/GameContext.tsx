@@ -10,10 +10,12 @@ export interface Participant {
     selectedCard?: string | number | null;
     hasVoted: boolean;
     isScrumMaster: boolean;
+    isConnected?: boolean; // Added connection status
 }
 
 export interface Room {
     roomId: string; // Add roomId to Room interface
+    roomName?: string; // Added roomName
     participants: Participant[]; // changed from Map to Array for JSON serialization
     currentRound: number;
     isRevealAllowed: boolean;
@@ -26,7 +28,7 @@ interface GameContextType {
     room: Room | null;
     userId: string;
     isScrumMaster: boolean;
-    joinRoom: (roomId: string, displayName: string, isScrumMaster: boolean) => void;
+    joinRoom: (roomId: string, displayName: string, isScrumMaster: boolean, roomName?: string) => void;
     selectCard: (card: string | number) => void;
     revealCards: () => void;
     resetRound: () => void;
@@ -104,10 +106,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     }, []);
 
-    const joinRoom = (roomId: string, displayName: string, master: boolean) => {
+    const joinRoom = (roomId: string, displayName: string, master: boolean, roomName?: string) => {
         if (!socket) return;
         setIsScrumMaster(master);
-        socket.emit('join_room', { roomId, userId, displayName, isScrumMaster: master });
+        socket.emit('join_room', { roomId, userId, displayName, isScrumMaster: master, roomName });
     };
 
     const selectCard = (card: string | number) => {

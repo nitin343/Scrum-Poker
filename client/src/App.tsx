@@ -12,12 +12,13 @@ function App() {
 
   const [displayName, setDisplayName] = useState('');
   const [roomIdInput, setRoomIdInput] = useState('');
+  const [roomNameInput, setRoomNameInput] = useState('');
   const [view, setView] = useState<'create' | 'join'>('create');
 
   const handleCreate = () => {
-    if (!displayName) return;
+    if (!displayName || !roomNameInput) return;
     const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    joinRoom(newRoomId, displayName, true);
+    joinRoom(newRoomId, displayName, true, roomNameInput);
   };
 
   const handleJoin = () => {
@@ -104,7 +105,27 @@ function App() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <label className="block text-sm font-semibold text-zinc-300 mb-2 ml-1">Display Name</label>
+              <AnimatePresence mode="wait">
+                {view === 'create' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  >
+                    <label className="block text-sm font-semibold text-zinc-300 mb-2 ml-1">Room Name</label>
+                    <input
+                      type="text"
+                      value={roomNameInput}
+                      onChange={(e) => setRoomNameInput(e.target.value)}
+                      placeholder="e.g. Sprint 42 Planning"
+                      className="w-full px-5 py-4 rounded-xl border border-white/10 bg-white/5 focus:bg-white/10 focus:border-purple-500 outline-none transition-all duration-300 text-white placeholder-zinc-500 font-medium"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <label className="block text-sm font-semibold text-zinc-300 mb-2 ml-1">
+                {view === 'create' ? 'Scrum Master Name' : 'Display Name'}
+              </label>
               <input
                 type="text"
                 value={displayName}
@@ -170,8 +191,8 @@ function App() {
                 ? 'bg-zinc-700 cursor-not-allowed opacity-50'
                 : 'bg-gradient-to-r from-purple-600 to-cyan-500'
                 }`}
-              whileHover={displayName && (roomIdInput || view === 'create') && isConnected ? { scale: 1.02 } : {}}
-              whileTap={displayName && (roomIdInput || view === 'create') && isConnected ? { scale: 0.98 } : {}}
+              whileHover={((view === 'create' && displayName && roomNameInput) || (view === 'join' && displayName && roomIdInput)) && isConnected ? { scale: 1.02 } : {}}
+              whileTap={((view === 'create' && displayName && roomNameInput) || (view === 'join' && displayName && roomIdInput)) && isConnected ? { scale: 0.98 } : {}}
             >
               {view === 'create' ? '🚀 Start New Session' : '🎯 Enter Room'}
             </motion.button>
@@ -183,18 +204,6 @@ function App() {
 
   // --- GAME VIEW ---
   const myParticipant = room.participants.find(p => p.userId === userId);
-
-  // MOCK PARTICIPANTS FOR TESTING (Remove for production)
-  const mockParticipants = Array.from({ length: 5 }).map((_, i) => ({
-    userId: `mock-${i}`,
-    socketId: `mock-sock-${i}`,
-    displayName: `Bot ${i + 1}`,
-    isScrumMaster: false,
-    hasVoted: true,
-    selectedCard: ['3', '5', '8', '13'][Math.floor(Math.random() * 4)]
-  }));
-
-  const allParticipants = [...room.participants, ...mockParticipants];
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-animated">
@@ -216,7 +225,7 @@ function App() {
               SP
             </motion.div>
             <div>
-              <h1 className="font-bold text-white text-sm leading-tight">Scrum Poker</h1>
+              <h1 className="font-bold text-white text-sm leading-tight">{room.roomName || 'Scrum Poker'}</h1>
               <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-medium">
                 <motion.span
                   className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
@@ -265,7 +274,7 @@ function App() {
           transition={{ duration: 0.6, delay: 0.2 }}
         >
           <Table
-            participants={allParticipants}
+            participants={room.participants}
             currentRound={room.currentRound}
             areCardsRevealed={room.areCardsRevealed}
             isScrumMaster={isScrumMaster}
