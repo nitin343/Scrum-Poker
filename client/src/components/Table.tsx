@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { Participant } from '../context/GameContext';
 
 // ============================================================
@@ -30,7 +30,6 @@ interface Seat {
 // ============================================================
 
 const CARD_WIDTH = 56;
-const CARD_HEIGHT = 80;
 const CARD_GAP = 40;
 const TABLE_GAP = 20;
 
@@ -313,7 +312,7 @@ export const Table: React.FC<TableProps> = ({
                                     isBack={!areCardsRevealed || phase !== 'IDLE'}
                                     isSelected={seat.participant.hasVoted}
                                     isMe={seat.isMe}
-                                    value={seat.participant.selectedCard}
+                                    value={seat.participant.selectedCard ?? null}
                                 />
                             </motion.div>
                             {/* NAME LABEL - Outside 3D context to stay flat */}
@@ -406,7 +405,6 @@ function calculateSeats(participants: Participant[], myId: string | null, width:
 
 function createSeat(p: Participant, side: string, idx: number, w: number, h: number, isMe: boolean, totalOnSide: number = 1): Seat {
     let x = 0, y = 0;
-    const NAME_OFFSET = 30;
 
     if (side === 'left') {
         x = -w / 2 - TABLE_GAP;

@@ -17,20 +17,20 @@ const cardVariants = {
         y: 0,
         transition: {
             duration: 0.3,
-            ease: 'easeOut'
+            ease: 'easeOut' as const
         }
     },
     hover: {
         y: -8,
         scale: 1.05,
-        transition: { duration: 0.2, ease: 'easeOut' }
+        transition: { duration: 0.2, ease: 'easeOut' as const }
     },
     tap: { scale: 0.95 },
     selected: {
         y: -12,
         scale: 1.1,
         opacity: 1,
-        transition: { duration: 0.2, ease: 'easeOut' }
+        transition: { duration: 0.2, ease: 'easeOut' as const }
     }
 };
 
@@ -47,8 +47,8 @@ export const CardDeck: React.FC<CardDeckProps> = ({ selectedValue, onSelect, dis
                         variants={cardVariants}
                         initial="initial"
                         animate={isSelected ? "selected" : "animate"}
-                        whileHover={!disabled ? "hover" : undefined}
-                        whileTap={!disabled ? "tap" : undefined}
+                        whileHover={!disabled ? "hover" : {}}
+                        whileTap={!disabled ? "tap" : {}}
                         custom={index}
                         className={`
                             relative w-11 h-16 md:w-14 md:h-20 rounded-xl
