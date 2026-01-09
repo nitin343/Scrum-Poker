@@ -1,18 +1,16 @@
-
-import express from 'express';
 import http from 'http';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import { Server } from 'socket.io';
+import { app } from './app';
 import { setupSocket } from './socket';
+import connectDB from './db/connection';
+import { jiraService } from './services/JiraService';
+import { logger } from './utils/logger/Logger';
+import { Constants } from './utils/constants';
 
 dotenv.config();
 
-const app = express();
 const server = http.createServer(app);
-
-app.use(cors());
-app.use(express.json());
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 
@@ -23,15 +21,34 @@ const io = new Server(server, {
     }
 });
 
-// Setup Socket.io logic
 setupSocket(io);
 
-app.get('/', (req, res) => {
-    res.send('Scrum Poker Server is running');
-});
+const PORT = process.env.PORT || Constants.DEFAULT_PORTS.SERVER;
 
-const PORT = process.env.PORT || 3001;
+const startServer = async () => {
+    try {
+        await connectDB();
+        logger.success('MongoDB connected successfully');
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+        logger.info('Initializing Jira Integration...');
+        jiraService.initClient();
+
+        logger.info('Testing Jira Connection...');
+        const jiraResult = await jiraService.testConnection();
+        
+        if (jiraResult.success) {
+            logger.success(`Jira Connection: ${jiraResult.message}`);
+        } else {
+            logger.warn(`Jira Connection: ${jiraResult.message}`);
+        }
+
+        server.listen(PORT, () => {
+            logger.success(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
+        logger.error('Failed to start server', error);
+        process.exit(1);
+    }
+};
+
+startServer();
