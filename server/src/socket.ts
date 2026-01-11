@@ -325,7 +325,7 @@ export const setupSocket = (io: Server) => {
                     });
                 }
 
-                socket.join(roomId);
+                await socket.join(roomId);
                 logger.info('[JOIN_ROOM] User joined room. Participants now:', Array.from(room.participants.keys()));
 
                 // Send initial room state to user immediately (Unblock UI)
