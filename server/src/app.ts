@@ -11,8 +11,33 @@ app.use(express.json({ limit: '10mb' }));  // Increased for large Jira issue pay
 // API v1 routes
 app.use('/api/v1', apiV1Routes);
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const dbState = mongoose.connection.readyState;
+        const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
+
+        if (dbState !== 1) {
+            return res.status(503).json({
+                status: 'unhealthy',
+                database: dbStatus,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        res.json({
+            status: 'healthy',
+            database: dbStatus,
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error: any) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 app.get('/', (req, res) => {
