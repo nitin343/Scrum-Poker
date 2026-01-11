@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
@@ -12,6 +12,7 @@ interface Board {
 
 export function BoardSelectionPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, updateSelectedBoard } = useAuth();
     const [boards, setBoards] = useState<Board[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -20,13 +21,14 @@ export function BoardSelectionPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        // If user already has a selected board, redirect to dashboard
-        if (user?.selectedBoardId) {
+        const isChangingBoard = location.state?.changeBoard;
+        // If user already has a selected board AND not explicitly changing it, redirect to dashboard
+        if (user?.selectedBoardId && !isChangingBoard) {
             navigate('/dashboard');
             return;
         }
         fetchBoards();
-    }, [user, navigate]);
+    }, [user, navigate, location]);
 
     const fetchBoards = async () => {
         setIsLoading(true);
@@ -108,8 +110,8 @@ export function BoardSelectionPage() {
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
                                     className={`w-full text-left px-5 py-4 rounded-xl transition-all border cursor-pointer ${selectedBoard?.id === board.id
-                                            ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/20'
-                                            : 'bg-white/5 border-transparent text-zinc-300 hover:bg-white/10 hover:border-white/10'
+                                        ? 'bg-purple-600/20 border-purple-500 text-white shadow-lg shadow-purple-500/20'
+                                        : 'bg-white/5 border-transparent text-zinc-300 hover:bg-white/10 hover:border-white/10'
                                         }`}
                                 >
                                     <div className="flex justify-between items-center">

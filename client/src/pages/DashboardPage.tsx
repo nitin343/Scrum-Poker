@@ -81,7 +81,7 @@ export function DashboardPage() {
 
     const handleChangeBoard = () => {
         // Clear selected board and go back to selection
-        navigate('/select-board');
+        navigate('/select-board', { state: { changeBoard: true } });
     };
 
     return (
