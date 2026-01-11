@@ -12,7 +12,11 @@ dotenv.config();
 
 const server = http.createServer(app);
 
-const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+const allowedOrigin = [
+    process.env.ALLOWED_ORIGIN || '*',
+    'https://scrum-poker-sand.vercel.app',
+    'http://localhost:5173'
+];
 
 const io = new Server(server, {
     cors: {
