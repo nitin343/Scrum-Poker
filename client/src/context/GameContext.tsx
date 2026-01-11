@@ -172,7 +172,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             s.disconnect();
         };
 
-    }, [isAuthenticated, token, guestName, guestSessionId]);
+    }, [isAuthenticated, token, guestName, guestSessionId, location.pathname]);
 
     const joinRoom = (roomId: string, displayName: string, master: boolean, roomName?: string, options: any = {}) => {
         console.log('[GameContext] joinRoom called', { roomId, socketId: socket?.id, isConnected: socket?.connected });
