@@ -203,10 +203,18 @@ select:focus {
 /* Button Base */
 button {
   transition: all 0.2s var(--ease-spring);
+  cursor: pointer;
 }
 
 button:active {
   transform: scale(0.97);
+}
+
+/* Links and Clickable Elements */
+a,
+[role="button"],
+[onclick] {
+  cursor: pointer;
 }
 
 /* Shimmer Effect */

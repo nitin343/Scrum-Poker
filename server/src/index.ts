@@ -33,17 +33,18 @@ const startServer = async () => {
         logger.info('Initializing Jira Integration...');
         jiraService.initClient();
 
-        logger.info('Testing Jira Connection...');
-        const jiraResult = await jiraService.testConnection();
-        
-        if (jiraResult.success) {
-            logger.success(`Jira Connection: ${jiraResult.message}`);
-        } else {
-            logger.warn(`Jira Connection: ${jiraResult.message}`);
-        }
-
         server.listen(PORT, () => {
             logger.success(`Server running on port ${PORT}`);
+        });
+
+        logger.info('Testing Jira Connection...');
+        // Run test in background so it doesn't block startup (especially if waiting 30s)
+        jiraService.testConnection().then(jiraResult => {
+            if (jiraResult.success) {
+                logger.success(`Jira Connection: ${jiraResult.message}`);
+            } else {
+                logger.warn(`Jira Connection: ${jiraResult.message}`);
+            }
         });
     } catch (error) {
         logger.error('Failed to start server', error);

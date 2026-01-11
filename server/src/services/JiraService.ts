@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import JiraApi from 'jira-client';
 import https from 'https';
 import { logger } from '../utils/logger/Logger';
@@ -122,59 +122,41 @@ class JiraService {
         });
     }
 
-    private testDirectHttpConnection(
-        config: JiraConfigOptions
-    ): Promise<{ success: boolean; user?: string; error?: string }> {
-        return new Promise((resolve) => {
-            const auth = Buffer.from(`${config.username}:${config.password}`).toString('base64');
 
-            const options = {
-                hostname: config.host,
-                path: '/jira/rest/api/2/myself',
-                method: 'GET',
-                headers: {
-                    'Authorization': `Basic ${auth}`,
-                    'Content-Type': 'application/json',
-                    ...config.headers
-                },
-                rejectUnauthorized: config.strictSSL
-            };
 
-            const req = https.request(options, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        if (res.statusCode === 200) {
-                            const parsed = JSON.parse(data);
-                            resolve({
-                                success: true,
-                                user: parsed.displayName
-                            });
-                        } else {
-                            resolve({
-                                success: false,
-                                error: `HTTP ${res.statusCode}`
-                            });
-                        }
-                    } catch (e) {
-                        resolve({
-                            success: false,
-                            error: 'Invalid response'
-                        });
+    private getAxiosClient(): AxiosInstance {
+        if (!this.axiosClient) {
+            this.initClient();
+        }
+        return this.axiosClient!;
+    }
+
+    private async retryRequest<T>(requestFn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+        try {
+            return await requestFn();
+        } catch (error: any) {
+            if (retries > 0 && (error.response?.status >= 500 || error.response?.status === 429)) {
+                let waitTime = delay;
+
+                // Check for Retry-After header
+                const retryAfter = error.response?.headers?.['retry-after'];
+                if (retryAfter) {
+                    const seconds = parseInt(retryAfter, 10);
+                    if (!isNaN(seconds)) {
+                        waitTime = seconds * 1000;
+                        logger.warn(`[Jira 503] Server requested wait: ${seconds}s`);
                     }
-                });
-            });
+                }
 
-            req.on('error', (err) => {
-                resolve({
-                    success: false,
-                    error: err.message
-                });
-            });
+                logger.warn(`Jira Request Failed (${error.response?.status}). Retrying in ${waitTime}ms... (${retries} retries left)`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
 
-            req.end();
-        });
+                // If we waited a long time, don't backoff further exponentially, just retry
+                const nextDelay = waitTime > 5000 ? waitTime : delay * 2.5;
+                return this.retryRequest(requestFn, retries - 1, nextDelay);
+            }
+            throw error;
+        }
     }
 
     public initClient(): void {
@@ -187,6 +169,18 @@ class JiraService {
 
             this.baseUrl = `${config.protocol}://${config.host}${config.base}`;
 
+            // Create HTTPS Agent with Keep-Alive
+            const httpsAgent = new https.Agent({
+                keepAlive: true,
+                rejectUnauthorized: config.strictSSL
+            });
+
+            // Add standard User-Agent to avoid WAF blocking
+            const headers = {
+                ...config.headers,
+                'User-Agent': 'ScrumPoker/1.0 (Node.js/Enterprise)'
+            };
+
             this.jiraClient = new JiraApi({
                 protocol: config.protocol,
                 host: config.host,
@@ -195,7 +189,7 @@ class JiraService {
                 password: config.password,
                 apiVersion: config.apiVersion,
                 strictSSL: config.strictSSL,
-                headers: config.headers
+                headers: headers
             });
 
             this.axiosClient = axios.create({
@@ -204,8 +198,9 @@ class JiraService {
                     username: config.username,
                     password: config.password
                 },
-                headers: config.headers,
-                timeout: 30000
+                headers: headers,
+                timeout: 30000,
+                httpsAgent: httpsAgent
             });
 
             logger.info('Jira client initialized successfully');
@@ -215,35 +210,23 @@ class JiraService {
         }
     }
 
-    private getClient(): JiraApi {
-        if (!this.jiraClient) {
-            this.initClient();
-        }
-        return this.jiraClient!;
-    }
-
-    private getAxiosClient(): AxiosInstance {
-        if (!this.axiosClient) {
-            this.initClient();
-        }
-        return this.axiosClient!;
-    }
-
     public async testConnection(): Promise<JiraConnectionResult> {
         try {
-            const config = this.getConfig();
-            const result = await this.testDirectHttpConnection(config);
+            console.log('Testing Jira Connection...');
+            const client = this.getAxiosClient();
 
-            if (result.success) {
+            const response = await this.retryRequest<AxiosResponse>(() => client.get('/api/2/myself'));
+
+            if (response.status === 200 && response.data) {
                 return {
                     success: true,
-                    message: `Connected as ${result.user}`,
+                    message: `Connected as ${response.data.displayName}`,
                     timestamp: new Date()
                 };
             } else {
                 return {
                     success: false,
-                    message: result.error || 'Connection failed',
+                    message: `HTTP ${response.status}`,
                     timestamp: new Date()
                 };
             }
@@ -303,15 +286,19 @@ class JiraService {
             const maxResults = 50;
 
             while (true) {
-                const response = await client.get(`/agile/1.0/board/${boardId}/sprint`, {
+                const response = await this.retryRequest<AxiosResponse>(() => client.get(`/agile/1.0/board/${boardId}/sprint`, {
                     params: { startAt, maxResults, state: 'FUTURE,ACTIVE,CLOSED' }
-                });
+                }));
 
-                if (response.data.values && response.data.values.length > 0) {
-                    allSprints = allSprints.concat(response.data.values);
+                // Debug Logging
+                const values = response.data?.values || [];
+                console.log(`[DEBUG] Page startAt=${startAt}, received ${values.length} sprints. IsLast=${response.data?.isLast}`);
+
+                if (values.length > 0) {
+                    allSprints = allSprints.concat(values);
                 }
 
-                if (response.data.isLast || !response.data.values || response.data.values.length < maxResults) {
+                if (response.data.isLast || values.length < maxResults) {
                     break;
                 }
 
@@ -338,13 +325,13 @@ class JiraService {
             const client = this.getAxiosClient();
             const jql = `sprint = ${sprintId}`;
 
-            const response = await client.get('/api/2/search', {
+            const response = await this.retryRequest<AxiosResponse>(() => client.get('/api/2/search', {
                 params: {
                     jql,
                     maxResults,
-                    fields: 'summary,status,assignee,reporter,issuetype,customfield_10106,description'
+                    fields: 'summary,status,assignee,reporter,issuetype,customfield_10106,timetracking'
                 }
-            });
+            }));
 
             const issues = response.data.issues || [];
 
@@ -410,7 +397,7 @@ class JiraService {
 
             const response = await client.get(`/api/2/issue/${issueKey}`, {
                 params: {
-                    fields: 'summary,status,assignee,reporter,issuetype,customfield_10106,description'
+                    fields: 'summary,status,assignee,reporter,issuetype,customfield_10106,description,timetracking'
                 }
             });
 
@@ -495,6 +482,59 @@ class JiraService {
         } catch (error: any) {
             logger.error('Failed to get current user', { error: error.message });
             return null;
+        }
+    }
+
+    public async updateIssuePoints(issueKey: string, points: string | number, issueType: string): Promise<boolean> {
+        try {
+            console.log(`\n📝 Updating ${issueType} ${issueKey} with ${points}...`);
+            const client = this.getAxiosClient();
+
+            const isBug = issueType?.toLowerCase() === 'bug';
+            let updatePayload: any = {};
+
+            if (isBug) {
+                // Time Tracking for Bugs - Jira expects timetracking object
+                updatePayload = {
+                    timetracking: {
+                        originalEstimate: String(points),
+                        remainingEstimate: String(points)
+                    }
+                };
+            } else {
+                // Story Points for others - customfield_10106 is standard Story Points field
+                const numPoints = Number(points);
+                updatePayload = {
+                    customfield_10106: isNaN(numPoints) ? null : numPoints
+                };
+            }
+
+            await client.put(`/api/2/issue/${issueKey}`, { fields: updatePayload });
+
+            logger.info('Issue updated', { issueKey, points, issueType });
+            console.log(`✅ Issue ${issueKey} updated successfully\n`);
+            return true;
+        } catch (error: any) {
+            logger.error('Failed to update issue points', { issueKey, error: error.message });
+            console.log(`\n❌ Failed to update issue points: ${error.message}\n`);
+            return false;
+        }
+    }
+
+    public async updateIssue(issueKey: string, fields: any): Promise<boolean> {
+        try {
+            console.log(`\n📝 Updating issue ${issueKey}...`);
+            const client = this.getAxiosClient();
+
+            await client.put(`/api/2/issue/${issueKey}`, { fields });
+
+            logger.info('Issue updated', { issueKey, fields });
+            console.log(`✅ Issue ${issueKey} updated successfully\n`);
+            return true;
+        } catch (error: any) {
+            logger.error('Failed to update issue', { issueKey, error: error.message });
+            console.log(`\n❌ Failed to update issue: ${error.message}\n`);
+            return false;
         }
     }
 }

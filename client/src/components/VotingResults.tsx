@@ -5,9 +5,22 @@ import type { Participant } from '../context/GameContext';
 interface VotingResultsProps {
     participants: Participant[];
     isVisible: boolean;
+    isScrumMaster?: boolean;
+    issueType?: string;
+    onSave?: (points: string | number) => void;
+    onRevote?: () => void;
+    isAlreadySaved?: boolean;
 }
 
-export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVisible }) => {
+const FIBONACCI = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+
+const getNearestFibonacci = (num: number) => {
+    return FIBONACCI.reduce((prev, curr) =>
+        Math.abs(curr - num) < Math.abs(prev - num) ? curr : prev
+    );
+};
+
+export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVisible, isScrumMaster, issueType = 'Story', onSave = () => { }, onRevote = () => { }, isAlreadySaved = false }) => {
     // Calculate vote distribution
     const voteData = useMemo(() => {
         const votes: Record<string, number> = {};
@@ -55,9 +68,40 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
         };
     }, [participants]);
 
+    const [finalScore, setFinalScore] = React.useState<string | number>('');
+    const [saveStatus, setSaveStatus] = React.useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+    // Effect to sync savedStatus with prop
+    React.useEffect(() => {
+        if (isAlreadySaved) {
+            setSaveStatus('success');
+        } else {
+            setSaveStatus('idle');
+        }
+    }, [isAlreadySaved, isVisible]);
+
+    // Update final score when average changes or visible
+    React.useEffect(() => {
+        if (!isVisible || voteData.average === null) return;
+
+        const isBug = issueType.toLowerCase() === 'bug';
+
+        if (isBug) {
+            // For bugs, we don't auto-set time from points usually, 
+            // but maybe we can default to something or leave empty?
+            // User wants "day hour min".
+            setFinalScore('');
+        } else {
+            // Snap to nearest Fibonacci
+            const nearest = getNearestFibonacci(voteData.average);
+            setFinalScore(nearest);
+        }
+    }, [voteData.average, isVisible, issueType]);
+
     if (!isVisible || voteData.distribution.length === 0) return null;
 
     const maxBarHeight = 50; // Smaller max height
+    const isBug = issueType.toLowerCase() === 'bug';
 
     return (
         <AnimatePresence>
@@ -66,10 +110,10 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="flex items-end justify-center gap-6"
+                className="w-full flex items-end justify-between gap-6"
             >
-                {/* Vote Distribution Bars */}
-                <div className="flex items-end gap-2">
+                {/* LEFT: Vote Distribution Bars */}
+                <div className="flex items-end gap-2 justify-start">
                     {voteData.distribution.map(([value, count]) => {
                         const barHeight = (count / voteData.maxVotes) * maxBarHeight;
                         return (
@@ -99,8 +143,8 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
                     })}
                 </div>
 
-                {/* Average & Agreement */}
-                <div className="flex items-center gap-6 ml-4">
+                {/* CENTER: Average & Agreement */}
+                <div className="flex items-center justify-center gap-6">
                     {/* Average */}
                     {voteData.average !== null && (
                         <div className="text-center">
@@ -142,6 +186,80 @@ export const VotingResults: React.FC<VotingResultsProps> = ({ participants, isVi
                         </div>
                     </div>
                 </div>
+
+                {/* RIGHT: Scrum Master Controls */}
+                {isScrumMaster && (
+                    <div className="flex flex-col gap-2 justify-end items-end">
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                            Final {isBug ? 'Time' : 'Score'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                            {/* Re-vote Button */}
+                            <button
+                                onClick={onRevote}
+                                className="w-8 h-9 flex items-center justify-center bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-400 hover:text-white rounded transition-colors"
+                                title="Restart Voting"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+
+                            {saveStatus === 'success' ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-green-500/20 border border-green-500/30 px-3 py-1.5 rounded flex items-center gap-2">
+                                        <span className="text-green-400 font-bold text-sm">✅ Saved to Jira</span>
+                                        <button
+                                            onClick={() => setSaveStatus('idle')}
+                                            className="text-[10px] text-green-300 hover:text-white underline ml-1"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <input
+                                        type={isBug ? "text" : "number"}
+                                        value={finalScore}
+                                        onChange={(e) => setFinalScore(e.target.value)}
+                                        placeholder={isBug ? "e.g. 1d 4h" : "Points"}
+                                        className="w-20 px-2 py-2 rounded bg-black/20 border border-white/10 text-white text-sm font-bold focus:outline-none focus:border-purple-500"
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            setSaveStatus('saving');
+                                            try {
+                                                await onSave(finalScore);
+                                                setSaveStatus('success');
+                                            } catch (e) {
+                                                setSaveStatus('error');
+                                                setTimeout(() => setSaveStatus('idle'), 3000);
+                                            }
+                                        }}
+                                        disabled={saveStatus === 'saving'}
+                                        className={`px-4 py-2 font-bold rounded-lg text-sm shadow-lg transition-all ${saveStatus === 'saving'
+                                            ? 'bg-slate-600 text-slate-300 cursor-wait'
+                                            : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white'
+                                            }`}
+                                    >
+                                        {saveStatus === 'saving' ? 'Saving...' : 'Save'}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        {saveStatus === 'success' && (
+                            <span className="text-[10px] text-green-400 font-bold text-right -mt-1 block animate-pulse">
+                                ✓ Updated in Jira
+                            </span>
+                        )}
+                        {saveStatus === 'error' && (
+                            <span className="text-[10px] text-red-400 font-bold text-right -mt-1 block">
+                                ✗ Failed to update
+                            </span>
+                        )}
+                    </div>
+                )}
             </motion.div>
         </AnimatePresence>
     );

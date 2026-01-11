@@ -19,6 +19,23 @@ class SessionService {
         expiresInHours?: number;
     }): Promise<IInviteSession> {
         try {
+            // Check for existing active session for this sprint (reconnection/sticky logic)
+            const existingSession = await InviteSession.findOne({
+                sprintId: data.sprintId,
+                isActive: true
+            }).sort({ createdAt: -1 });
+
+            if (existingSession) {
+                // Check if expired
+                if (!existingSession.expiresAt || existingSession.expiresAt > new Date()) {
+                    logger.info('Returning existing active session for sprint', {
+                        sessionId: existingSession.sessionId,
+                        sprintId: data.sprintId
+                    });
+                    return existingSession;
+                }
+            }
+
             const expiresAt = data.expiresInHours
                 ? new Date(Date.now() + data.expiresInHours * 60 * 60 * 1000)
                 : null;

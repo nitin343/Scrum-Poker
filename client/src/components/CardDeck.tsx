@@ -38,7 +38,7 @@ export const CardDeck: React.FC<CardDeckProps> = ({ selectedValue, onSelect, dis
     return (
         <div className="flex justify-center gap-2 md:gap-3 flex-wrap pb-safe">
             {FIBONACCI.map((value, index) => {
-                const isSelected = selectedValue === value;
+                const isSelected = String(selectedValue) === String(value);
                 return (
                     <motion.button
                         key={value}
@@ -59,7 +59,7 @@ export const CardDeck: React.FC<CardDeckProps> = ({ selectedValue, onSelect, dis
                                 : 'cursor-pointer'
                             }
                             ${isSelected
-                                ? 'bg-[#1B2838] border-2 border-purple-500 text-white'
+                                ? 'bg-purple-600 border-2 border-purple-400 text-white shadow-[0_0_20px_rgba(147,51,234,0.5)]'
                                 : 'bg-[#1B2838] border border-white/20 text-white hover:border-purple-500/50'
                             }
                         `}

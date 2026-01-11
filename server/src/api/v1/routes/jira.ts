@@ -2,8 +2,11 @@ import { Router, Request, Response } from 'express';
 import { jiraService } from '../../../services/JiraService';
 import { authMiddleware } from '../middleware/auth';
 import { logger } from '../../../utils/logger/Logger';
+import Sprint from '../../../models/Sprint';
 
 const router = Router();
+
+
 
 router.get('/test-connection', authMiddleware, async (req: Request, res: Response) => {
     try {
@@ -140,6 +143,93 @@ router.get('/issues/:issueKey', authMiddleware, async (req: Request, res: Respon
         res.status(500).json({
             success: false,
             message: 'Failed to fetch issue'
+        });
+    }
+});
+
+// Update issue story points or time estimate
+router.put('/issues/:issueKey/points', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const issueKey = req.params.issueKey;
+        const { points, issueType, votingResults, sprintId } = req.body;
+
+        logger.info('Updating issue points', { issueKey, points, issueType, sprintId });
+        console.log(`\n🎯 [API] Updating ${issueKey} with points:`, points, 'type:', issueType);
+
+        if (points === undefined || points === null || points === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'Points value is required'
+            });
+        }
+
+        // 1. Update Jira
+        try {
+            await jiraService.updateIssuePoints(issueKey, points, issueType);
+        } catch (jiraError: any) {
+            console.error('❌ [API] Jira Update Failed:', jiraError?.response?.data || jiraError.message);
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to update Jira: ' + (jiraError?.response?.data?.errorMessages?.join(', ') || jiraError.message)
+            });
+        }
+
+        // 2. Update Sprint DB with voting history
+        if (votingResults) {
+            try {
+                // Scope by sprintId if provided to ensure we update the active sprint, not an old one
+                const query = sprintId
+                    ? { sprintId, "tickets.issueKey": issueKey }
+                    : { "tickets.issueKey": issueKey };
+
+                const sprint = await Sprint.findOne(query);
+
+                if (sprint) {
+                    const ticketIndex = sprint.tickets.findIndex(t => t.issueKey === issueKey);
+                    if (ticketIndex >= 0) {
+                        const ticket = sprint.tickets[ticketIndex];
+
+                        // Add new voting round
+                        ticket.votingRounds.push({
+                            roundNumber: votingResults.roundNumber || (ticket.votingRounds.length + 1),
+                            votes: votingResults.votes || [],
+                            average: votingResults.average,
+                            agreement: votingResults.agreement,
+                            finalPoints: issueType === 'Story' ? Number(points) : undefined,
+                            finalTimeEstimate: issueType === 'Bug' ? String(points) : undefined,
+                            revealedAt: new Date(),
+                            updatedInJira: true
+                        });
+
+                        // Update current points in DB too
+                        if (issueType === 'Story') ticket.currentPoints = Number(points);
+                        if (issueType === 'Bug') ticket.timeEstimate = String(points);
+
+                        await sprint.save();
+                        console.log(`💾 [DB] Saved voting history for ${issueKey}`);
+                    }
+                } else {
+                    console.warn(`⚠️ [DB] Sprint not found for issue ${issueKey} - cannot save history`);
+                }
+            } catch (dbError: any) {
+                console.error('❌ [API] DB Save Failed:', dbError.message);
+                // We don't block the response since Jira was updated, but we log the error
+                // Optionally return 207 Multi-Status or just warning
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Issue updated successfully',
+            issueKey,
+            value: points
+        });
+    } catch (error: any) {
+        logger.error('Failed to update issue points', { error: error.message });
+        console.log('❌ [API] Fatal Error:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update issue points: ' + error.message
         });
     }
 });

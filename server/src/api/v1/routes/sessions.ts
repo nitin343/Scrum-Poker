@@ -12,6 +12,7 @@ const router = Router();
  */
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
     try {
+        logger.info('[API] Creating Session', { body: req.body });
         const userId = (req as any).user.id;
         const { boardId, boardName, sprintId, sprintName, expiresInHours } = req.body;
 
@@ -48,11 +49,12 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
             success: true,
             data: {
                 sessionId: session.sessionId,
+                inviteToken: session.inviteToken,
                 boardId: session.boardId,
                 boardName: session.boardName,
                 sprintId: session.sprintId,
                 sprintName: session.sprintName,
-                inviteLink: `/join/${session.sessionId}`,
+                inviteLink: `/room/${session.sessionId}?token=${session.inviteToken}`,
                 expiresAt: session.expiresAt,
                 createdAt: session.createdAt
             }
@@ -66,10 +68,13 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 /**
  * GET /api/v1/sessions/:sessionId
  * Get session details (public - for guest join page)
+ * Requires ?token= query param for guest verification
  */
 router.get('/:sessionId', async (req: Request, res: Response) => {
     try {
         const { sessionId } = req.params;
+        const { token } = req.query;
+        logger.info('[API] Getting Session', { sessionId, tokenPresent: !!token });
 
         const session = await sessionService.getSession(sessionId);
 
@@ -79,13 +84,23 @@ router.get('/:sessionId', async (req: Request, res: Response) => {
             });
         }
 
-        // Return only what guests need to see
+        // Validate invite token for guest access
+        if (!token || session.inviteToken !== token) {
+            return res.status(403).json({
+                error: 'Invalid or missing invite token'
+            });
+        }
+
+        // Return session details including IDs needed for room join
         res.json({
             success: true,
             data: {
                 sessionId: session.sessionId,
+                boardId: session.boardId,
                 boardName: session.boardName,
+                sprintId: session.sprintId,
                 sprintName: session.sprintName,
+                companyId: session.companyId,
                 createdByName: session.createdByName,
                 isActive: session.isActive
             }

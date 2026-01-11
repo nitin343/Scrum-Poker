@@ -10,15 +10,28 @@ export interface Participant {
   isConnected: boolean;
 }
 
+export interface IssueStub {
+  issueKey: string;
+  issueId: string;
+  summary: string;
+}
+
 export interface CurrentIssue {
   issueKey: string;
+  issueId?: string; // Added optional issueId for compatibility
   summary: string;
-  issueType: 'Story' | 'Bug' | 'Task' | 'Sub-task';
+  issueType: string;
   assignee?: {
     accountId: string;
     displayName: string;
   };
   currentPoints?: number;
+  timeEstimate?: string;
+}
+
+export interface CachedIssue {
+  data: CurrentIssue;
+  timestamp: number;
 }
 
 export interface Room {
@@ -35,9 +48,11 @@ export interface Room {
 
   // Issue tracking
   currentIssue?: CurrentIssue;
+  savedInJira?: boolean; // Persisted status of current issue
   currentIssueIndex: number;
   totalIssues: number;
-  issues: CurrentIssue[];    // All issues for the session
+  issues: IssueStub[];       // Lightweight stubs
+  issueCache: Map<string, CachedIssue>; // Key -> Full Data
 }
 
 // In-memory store
@@ -72,7 +87,8 @@ export const createRoom = (
     areCardsRevealed: false,
     currentIssueIndex: 0,
     totalIssues: 0,
-    issues: []
+    issues: [],
+    issueCache: new Map()
   };
 
   // Add Scrum Master as participant
@@ -126,30 +142,46 @@ export const addGuestToRoom = (
 };
 
 /**
- * Set issues for a room
+ * Set issues for a room (Stubs only)
  */
-export const setRoomIssues = (roomId: string, issues: CurrentIssue[]): boolean => {
+export const setRoomIssues = (roomId: string, issues: IssueStub[]): boolean => {
   const room = rooms.get(roomId);
   if (!room) return false;
 
   room.issues = issues;
   room.totalIssues = issues.length;
   room.currentIssueIndex = 0;
-  room.currentIssue = issues[0] || undefined;
+  // Note: currentIssue is NOT set here immediately. 
+  // It needs to be fetched via "activeIssue" or prefetch logic in socket.ts
 
   return true;
 };
 
 /**
- * Navigate to next issue
+ * Helper to update the active issue data
  */
-export const nextIssue = (roomId: string): { issue: CurrentIssue | null; index: number; total: number } | null => {
+export const setActiveIssue = (roomId: string, issue: CurrentIssue) => {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  room.currentIssue = issue;
+
+  // Also cache it
+  room.issueCache.set(issue.issueKey, {
+    data: issue,
+    timestamp: Date.now()
+  });
+};
+
+/**
+ * Navigate to next issue - Returns STUB only
+ */
+export const nextIssue = (roomId: string): { issueStub: IssueStub | null; index: number; total: number } | null => {
   const room = rooms.get(roomId);
   if (!room) return null;
 
   if (room.currentIssueIndex < room.totalIssues - 1) {
     room.currentIssueIndex++;
-    room.currentIssue = room.issues[room.currentIssueIndex];
+    // We do NOT set currentIssue here yet. Caller must fetch it.
 
     // Reset voting for new issue
     room.areCardsRevealed = false;
@@ -161,22 +193,21 @@ export const nextIssue = (roomId: string): { issue: CurrentIssue | null; index: 
   }
 
   return {
-    issue: room.currentIssue || null,
+    issueStub: room.issues[room.currentIssueIndex] || null,
     index: room.currentIssueIndex,
     total: room.totalIssues
   };
 };
 
 /**
- * Navigate to previous issue
+ * Navigate to previous issue - Returns STUB only
  */
-export const prevIssue = (roomId: string): { issue: CurrentIssue | null; index: number; total: number } | null => {
+export const prevIssue = (roomId: string): { issueStub: IssueStub | null; index: number; total: number } | null => {
   const room = rooms.get(roomId);
   if (!room) return null;
 
   if (room.currentIssueIndex > 0) {
     room.currentIssueIndex--;
-    room.currentIssue = room.issues[room.currentIssueIndex];
 
     // Reset voting for new issue
     room.areCardsRevealed = false;
@@ -188,22 +219,21 @@ export const prevIssue = (roomId: string): { issue: CurrentIssue | null; index: 
   }
 
   return {
-    issue: room.currentIssue || null,
+    issueStub: room.issues[room.currentIssueIndex] || null,
     index: room.currentIssueIndex,
     total: room.totalIssues
   };
 };
 
 /**
- * Go to specific issue index
+ * Go to specific issue index - Returns STUB only
  */
-export const goToIssue = (roomId: string, index: number): { issue: CurrentIssue | null; index: number; total: number } | null => {
+export const goToIssue = (roomId: string, index: number): { issueStub: IssueStub | null; index: number; total: number } | null => {
   const room = rooms.get(roomId);
   if (!room) return null;
 
   if (index >= 0 && index < room.totalIssues) {
     room.currentIssueIndex = index;
-    room.currentIssue = room.issues[index];
 
     // Reset voting for new issue
     room.areCardsRevealed = false;
@@ -215,7 +245,7 @@ export const goToIssue = (roomId: string, index: number): { issue: CurrentIssue 
   }
 
   return {
-    issue: room.currentIssue || null,
+    issueStub: room.issues[room.currentIssueIndex] || null,
     index: room.currentIssueIndex,
     total: room.totalIssues
   };

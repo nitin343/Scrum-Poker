@@ -224,17 +224,14 @@ router.post('/:sprintId/sync-jira', authMiddleware, async (req: Request, res: Re
             }
         }
 
-        // Transform and merge issues
+        // Transform and merge issues - Minimal Storage Strategy
         const transformedTickets = issues.map((issue: any) => ({
             issueKey: issue.key as string,
-            summary: (issue.fields?.summary || '') as string,
-            description: (issue.fields?.description || '') as string,
+            issueId: issue.id as string,
             issueType: (issue.fields?.issuetype?.name || 'Story') as 'Story' | 'Bug' | 'Task' | 'Sub-task',
-            jiraUrl: (issue.self || '') as string,
-            assignee: issue.fields?.assignee ? {
-                accountId: issue.fields.assignee.accountId as string,
-                displayName: issue.fields.assignee.displayName as string
-            } : undefined,
+            // Minimal or empty strings for optional fields if needed, but we made them optional in Schema
+            // We do NOT store summary, description, assignee to save DB space
+            // jiraUrl: (issue.self || '') as string,
             currentPoints: issue.fields?.customfield_10106 as number | undefined,
             votingRounds: [] as any[]
         }));

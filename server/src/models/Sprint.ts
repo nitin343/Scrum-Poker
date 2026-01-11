@@ -11,10 +11,12 @@ export interface IVotingRecord {
 // Ticket within a sprint
 export interface ITicket {
     issueKey: string;
-    summary: string;
-    description?: string;
+    issueId?: string; // Jira ID (optional for backward compat)
     issueType: 'Story' | 'Bug' | 'Task' | 'Sub-task';
-    jiraUrl: string;
+    // Optional fields - fetched from Jira on demand
+    summary?: string;
+    description?: string;
+    jiraUrl?: string; // Constructable from key
     assignee?: {
         accountId: string;
         displayName: string;
@@ -68,17 +70,18 @@ const VotingRoundSchema = new Schema({
 }, { _id: false });
 
 const AssigneeSchema = new Schema({
-    accountId: { type: String, required: true },
-    displayName: { type: String, required: true }
+    accountId: { type: String },  // Made optional - some Jira issues may not have full assignee info
+    displayName: { type: String }
 }, { _id: false });
 
 const TicketSchema = new Schema({
     issueKey: { type: String, required: true },
-    summary: { type: String, required: true },
+    issueId: { type: String }, // Optional for now
+    summary: { type: String }, // Optional
     description: String,
     issueType: {
         type: String,
-        enum: ['Story', 'Bug', 'Task', 'Sub-task'],
+        // enum: ['Story', 'Bug', 'Task', 'Sub-task'], // Relax enum to allow others
         default: 'Story'
     },
     jiraUrl: String,
@@ -142,5 +145,7 @@ const SprintSchema: Schema = new Schema({
 SprintSchema.index({ boardId: 1, sprintId: 1 }, { unique: true });
 SprintSchema.index({ companyId: 1, boardId: 1 });
 // Note: shareableCode index is created by the schema definition unique: true
+
+export default mongoose.model<ISprint>('Sprint', SprintSchema);
 
 export const Sprint = mongoose.model<ISprint>('Sprint', SprintSchema);
