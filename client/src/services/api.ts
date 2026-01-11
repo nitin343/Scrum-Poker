@@ -1,5 +1,9 @@
 const API_BASE = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001/api/v1';
 
+if (import.meta.env.PROD && API_BASE.includes('localhost')) {
+    console.error('🚨 CRITICAL CONFIG ERROR: Production app is trying to connect to localhost. You must set VITE_SERVER_URL in your Vercel Environment Variables.');
+}
+
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const token = localStorage.getItem('token');
     const headers = {

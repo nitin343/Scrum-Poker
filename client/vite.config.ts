@@ -11,7 +11,5 @@ export default defineConfig({
     setupFiles: './src/setupTests.ts',
     css: false,
   } as any,
-  define: {
-    'import.meta.env.VITE_SERVER_URL': JSON.stringify('http://localhost:3001/api/v1'),
-  },
+
 })
