@@ -58,6 +58,7 @@ class AuthService {
             const inviter = await Admin.findOne({ inviteCode: inviteCode.toUpperCase() });
 
             if (!inviter) {
+                logger.warn(`Invite code not found: ${inviteCode}`);
                 return { valid: false };
             }
 
@@ -85,6 +86,7 @@ class AuthService {
         // Validate invite code first
         const inviteValidation = await this.validateInviteCode(inviteCode);
         if (!inviteValidation.valid) {
+            logger.warn(`Signup failed: Invalid invite code ${inviteCode}`);
             throw new Error('Invalid invite code');
         }
 

@@ -8,6 +8,7 @@ export interface Participant {
   isScrumMaster: boolean;
   isGuest: boolean;          // Whether this is a guest (via invite link)
   isConnected: boolean;
+  isBot?: boolean;           // Added for AI support
 }
 
 export interface IssueStub {
@@ -20,6 +21,8 @@ export interface CurrentIssue {
   issueKey: string;
   issueId?: string; // Added optional issueId for compatibility
   summary: string;
+  description?: string; // Added for AI prompt
+  acceptanceCriteria?: string; // Added for AI prompt
   issueType: string;
   assignee?: {
     accountId: string;
@@ -27,6 +30,27 @@ export interface CurrentIssue {
   };
   currentPoints?: number;
   timeEstimate?: string;
+  comments?: Array<{
+    author: string;
+    body: string;
+    created: string;
+  }>;
+  attachments?: Array<{
+    filename: string;
+    author: string;
+    created: string;
+    url: string; // Add URL for AI reference
+  }>;
+  issuelinks?: Array<{
+    type: string;
+    outwardIssue?: { key: string; summary: string; status: { name: string } };
+    inwardIssue?: { key: string; summary: string; status: { name: string } };
+  }>;
+  // --- Enhanced Context Fields ---
+  status?: string;
+  reporter?: string;
+  priority?: string;
+  labels?: string[];
 }
 
 export interface CachedIssue {
@@ -53,6 +77,14 @@ export interface Room {
   totalIssues: number;
   issues: IssueStub[];       // Lightweight stubs
   issueCache: Map<string, CachedIssue>; // Key -> Full Data
+
+  // AI Analysis Data
+  aiAnalysis?: {
+    story_points: number;
+    confidence: 'high' | 'medium' | 'low';
+    reasoning: string;
+    risk_factors?: string[];
+  } | null;
 }
 
 // In-memory store

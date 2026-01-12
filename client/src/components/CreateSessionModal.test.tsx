@@ -37,7 +37,7 @@ describe('CreateSessionModal', () => {
         expect(api.jira.getBoards).toHaveBeenCalled();
 
         await waitFor(() => {
-            expect(screen.getByText('Board A')).toBeInTheDocument();
+            expect(screen.getByText(/Board A/)).toBeInTheDocument();
         });
     });
 
@@ -47,13 +47,13 @@ describe('CreateSessionModal', () => {
 
         render(<CreateSessionModal isOpen={true} onClose={mockOnClose} onSessionCreated={mockOnCreated} />);
 
-        await waitFor(() => screen.getByText('Board A'));
-        fireEvent.click(screen.getByText('Board A'));
+        await waitFor(() => screen.getByText(/Board A/));
+        fireEvent.click(screen.getByText(/Board A/));
 
         expect(api.jira.getSprints).toHaveBeenCalledWith(1);
 
         await waitFor(() => {
-            expect(screen.getByText('Sprint 1')).toBeInTheDocument();
+            expect(screen.getByText(/Sprint 1/)).toBeInTheDocument();
         });
     });
 
@@ -65,12 +65,13 @@ describe('CreateSessionModal', () => {
         render(<CreateSessionModal isOpen={true} onClose={mockOnClose} onSessionCreated={mockOnCreated} />);
 
         // Select Board
-        await waitFor(() => screen.getByText('Board A'));
-        fireEvent.click(screen.getByText('Board A'));
+        await waitFor(() => screen.getByText(/Board A/));
+        fireEvent.click(screen.getByText(/Board A/));
 
         // Select Sprint
-        await waitFor(() => screen.getByText('Sprint 1'));
-        fireEvent.click(screen.getByText('Sprint 1')); // Select sprint logic might need check if it matches EXACTLY the button text
+        // Select Sprint
+        await waitFor(() => screen.getByText(/Sprint 1/));
+        fireEvent.click(screen.getByText(/Sprint 1/));
         // Note: The sprint button text contains name and state. 
         // "Sprint 1" might target the name div.
 

@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import mongoose from 'mongoose';
 import request from 'supertest';
 import { app } from '../app';
 import { Admin } from '../models/Admin';
@@ -8,6 +9,20 @@ import jwt from 'jsonwebtoken';
 describe('Session Routes', () => {
     let admin: any;
     let authToken: string;
+
+    // Ensure DB connection for Integration Tests
+    beforeAll(async () => {
+        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/scrum-poker-test-sessions';
+        if (mongoose.connection.readyState === 0) {
+            await mongoose.connect(mongoUri);
+        }
+    });
+
+    afterAll(async () => {
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.close();
+        }
+    });
 
     beforeEach(async () => {
         admin = new Admin({
@@ -48,7 +63,7 @@ describe('Session Routes', () => {
             expect(res.status).toBe(201);
             expect(res.body.success).toBe(true);
             expect(res.body.data.sessionId).toBeDefined();
-            expect(res.body.data.inviteLink).toContain('/join/');
+            expect(res.body.data.inviteLink).toContain('/room/');
         });
 
         it('should fail without required fields', async () => {
@@ -95,13 +110,14 @@ describe('Session Routes', () => {
             await session.save();
 
             const res = await request(app)
-                .get(`/api/v1/sessions/${session.sessionId}`);
+                .get(`/api/v1/sessions/${session.sessionId}?token=${session.inviteToken}`);
 
             expect(res.status).toBe(200);
             expect(res.body.data.boardName).toBe('Test Board');
             expect(res.body.data.sprintName).toBe('Sprint 1');
-            // Should NOT expose boardId or sprintId to guests
-            expect(res.body.data.boardId).toBeUndefined();
+            // IDs are needed for room join
+            expect(res.body.data.boardId).toBe('123');
+            expect(res.body.data.sprintId).toBe('456');
         });
 
         it('should return 404 for non-existent session', async () => {

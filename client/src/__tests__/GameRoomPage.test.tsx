@@ -1,5 +1,6 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { GameRoomPage } from '../pages/GameRoomPage';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
@@ -89,6 +90,10 @@ vi.mock('../components/VotingResults', () => ({
     )
 }));
 
+vi.mock('../components/BotAnalysisPanel', () => ({
+    BotAnalysisPanel: () => <div data-testid="bot-analysis-panel" />
+}));
+
 describe('GameRoomPage', () => {
 
     // Internal Mocks for useGame
@@ -152,22 +157,32 @@ describe('GameRoomPage', () => {
         mocks.updateIssuePoints.mockResolvedValue({ success: true });
     });
 
+    // ... existing code ...
+
     it('renders room content when room is active', () => {
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
         expect(screen.getByText('Test Room')).toBeInTheDocument();
         expect(screen.getByTestId('issue-display')).toHaveTextContent('Test Issue');
         expect(screen.getByTestId('card-deck')).toBeInTheDocument();
     });
 
-    it('calls joinRoom on mount if authenticated and not connected', async () => {
+    it('calls joinRoom on mount if authenticated and connected', async () => {
         (useGame as any).mockReturnValue({
             room: null,
-            isConnected: false,
+            isConnected: true,
             joinRoom: mocks.joinRoom,
             socket: { id: 'socket-1' } // socket must exist
         });
 
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
 
         await waitFor(() => {
             expect(mocks.joinRoom).toHaveBeenCalledWith(
@@ -182,7 +197,11 @@ describe('GameRoomPage', () => {
 
     // ... Sync Test ...
     it('triggers Jira data sync API when Sync button is clicked', async () => {
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
 
         // Find Sync Button (only visible to Scrum Master)
         const syncBtn = screen.getByText('↻ Sync Jira');
@@ -198,11 +217,27 @@ describe('GameRoomPage', () => {
     // ... Save Payload Test ...
     it('sends proper payload including voting data when Save is clicked', async () => {
         (useGame as any).mockReturnValue({
-            ...useGame(),
-            room: { ...defaultRoom, areCardsRevealed: true }
+            room: { ...defaultRoom, areCardsRevealed: true },
+            isConnected: true,
+            joinRoom: mocks.joinRoom,
+            joinAsGuest: mockJoinAsGuest,
+            nextIssue: mocks.nextIssue,
+            prevIssue: mockPrevIssue,
+            revealCards: mockRevealCards,
+            resetRound: mockResetRound,
+            selectCard: mockSelectCard,
+            setIssues: mocks.setIssues,
+            userId: 'user-1',
+            isScrumMaster: true,
+            socket: { id: 'socket-1' },
+            isNavigating: false
         });
 
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
 
         // Click Save in VotingResults
         fireEvent.click(screen.getByTestId('save-btn'));
@@ -222,14 +257,19 @@ describe('GameRoomPage', () => {
                             vote: "5"
                         })
                     ])
-                })
+                }),
+                'sprint-1' // Add missing sprintId argument
             );
         });
     });
 
     // ... Navigation Test ...
     it('calls navigation API (nextIssue) to fetch fresh data', () => {
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
         const nextBtn = screen.getByTestId('next-btn');
         fireEvent.click(nextBtn);
 
@@ -237,7 +277,11 @@ describe('GameRoomPage', () => {
     });
 
     it('calls navigation API (prevIssue) to fetch fresh data', () => {
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
         const prevBtn = screen.getByTestId('prev-btn');
         fireEvent.click(prevBtn);
 
@@ -245,7 +289,11 @@ describe('GameRoomPage', () => {
     });
 
     it('calls reveal API (revealCards) to show voting results', () => {
-        render(<GameRoomPage />);
+        render(
+            <MemoryRouter>
+                <GameRoomPage />
+            </MemoryRouter>
+        );
         const revealBtn = screen.getByTestId('reveal-btn');
         fireEvent.click(revealBtn);
 

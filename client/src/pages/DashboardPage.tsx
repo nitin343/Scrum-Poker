@@ -30,7 +30,7 @@ export function DashboardPage() {
         // Debounce fetch (1 second)
         const now = Date.now();
         if (now - lastFetchTime < 1000) {
-            console.log('Skipping duplicate fetchSprints');
+
             return;
         }
         lastFetchTime = now;
@@ -178,6 +178,15 @@ export function DashboardPage() {
                     <h2 className="text-2xl font-bold tracking-tight">
                         Board: {user?.selectedBoardId || 'None Selected'}
                     </h2>
+                    {user?.selectedBoardId && (
+                        <button
+                            onClick={() => navigate(`/boards/${user.selectedBoardId}/settings`)}
+                            className="px-4 py-2 glass rounded-lg text-sm text-zinc-300 hover:text-white transition-colors flex items-center gap-2"
+                        >
+                            <span>⚙️</span>
+                            <span>AI Settings</span>
+                        </button>
+                    )}
                 </header>
 
                 {/* Content Area */}

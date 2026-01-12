@@ -22,7 +22,9 @@ const io = new Server(server, {
     cors: {
         origin: allowedOrigin,
         methods: ['GET', 'POST']
-    }
+    },
+    pingTimeout: 600000, // 10 minutes
+    pingInterval: 25000
 });
 
 setupSocket(io);

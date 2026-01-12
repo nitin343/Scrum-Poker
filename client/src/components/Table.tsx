@@ -354,13 +354,16 @@ export const Table: React.FC<TableProps> = ({
                                 >
                                     <span
                                         className={`
-                                        px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide
-                                        ${seat.isMe ? 'bg-amber-600 text-white' : 'bg-slate-800/80 text-slate-300'}
+                                        px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wide flex items-center gap-1
+                                        ${seat.isMe ? 'bg-amber-600 text-white' :
+                                                (seat.participant as any).isBot ? 'bg-gradient-to-r from-cyan-600 to-purple-600 text-white shadow-lg shadow-cyan-500/20' :
+                                                    'bg-slate-800/80 text-slate-300'}
                                     `}
                                     >
+                                        {(seat.participant as any).isBot && <span className="text-[10px]">🤖</span>}
                                         {seat.isMe ? 'You' : seat.participant.displayName}
                                     </span>
-                                    {seat.participant.isConnected === false && (
+                                    {seat.participant.isConnected === false && !(seat.participant as any).isBot && (
                                         <div className="text-[8px] font-bold text-red-500 mt-1 uppercase tracking-widest text-center animate-pulse">
                                             Offline
                                         </div>

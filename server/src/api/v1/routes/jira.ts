@@ -154,7 +154,7 @@ router.put('/issues/:issueKey/points', authMiddleware, async (req: Request, res:
         const { points, issueType, votingResults, sprintId } = req.body;
 
         logger.info('Updating issue points', { issueKey, points, issueType, sprintId });
-        console.log(`\n🎯 [API] Updating ${issueKey} with points:`, points, 'type:', issueType);
+
 
         if (points === undefined || points === null || points === '') {
             return res.status(400).json({
@@ -167,7 +167,7 @@ router.put('/issues/:issueKey/points', authMiddleware, async (req: Request, res:
         try {
             await jiraService.updateIssuePoints(issueKey, points, issueType);
         } catch (jiraError: any) {
-            console.error('❌ [API] Jira Update Failed:', jiraError?.response?.data || jiraError.message);
+            logger.error(`[API] Jira Update Failed: ${jiraError?.response?.data || jiraError.message}`);
             return res.status(500).json({
                 success: false,
                 message: 'Failed to update Jira: ' + (jiraError?.response?.data?.errorMessages?.join(', ') || jiraError.message)
@@ -206,13 +206,13 @@ router.put('/issues/:issueKey/points', authMiddleware, async (req: Request, res:
                         if (issueType === 'Bug') ticket.timeEstimate = String(points);
 
                         await sprint.save();
-                        console.log(`💾 [DB] Saved voting history for ${issueKey}`);
+                        logger.info(`[DB] Saved voting history for ${issueKey}`);
                     }
                 } else {
-                    console.warn(`⚠️ [DB] Sprint not found for issue ${issueKey} - cannot save history`);
+                    logger.warn(`[DB] Sprint not found for issue ${issueKey} - cannot save history`);
                 }
             } catch (dbError: any) {
-                console.error('❌ [API] DB Save Failed:', dbError.message);
+                logger.error(`[API] DB Save Failed: ${dbError.message}`);
                 // We don't block the response since Jira was updated, but we log the error
                 // Optionally return 207 Multi-Status or just warning
             }
@@ -226,7 +226,7 @@ router.put('/issues/:issueKey/points', authMiddleware, async (req: Request, res:
         });
     } catch (error: any) {
         logger.error('Failed to update issue points', { error: error.message });
-        console.log('❌ [API] Fatal Error:', error.message);
+
         res.status(500).json({
             success: false,
             message: 'Failed to update issue points: ' + error.message

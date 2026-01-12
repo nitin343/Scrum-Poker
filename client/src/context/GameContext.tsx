@@ -37,6 +37,12 @@ export interface Room {
     totalIssues?: number;
     isPreEstimated?: boolean; // True if ticket has estimate but no voting history from our app
     savedInJira?: boolean; // True if current round was already saved to Jira
+    aiAnalysis?: {
+        story_points: number;
+        confidence: 'high' | 'medium' | 'low';
+        reasoning: string;
+        risk_factors?: string[];
+    } | null;
 }
 
 interface GameContextType {
@@ -59,7 +65,7 @@ interface GameContextType {
     error: string | null;
 }
 
-const GameContext = createContext<GameContextType | undefined>(undefined);
+export const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user, token, isAuthenticated } = useAuth();
@@ -82,7 +88,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (!shouldConnect) {
             if (socket) {
-                console.log('[GameContext] Disconnecting socket (not on game route)');
+
                 socket.disconnect();
                 setSocket(null);
                 setIsConnected(false);
@@ -123,7 +129,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         s.on('room_update', (updatedRoom: Room) => {
-            console.log('[GameContext] Received room_update', updatedRoom);
+
             // Preserve isPreEstimated from previous state since room_update doesn't include it
             setRoom(prev => ({
                 ...updatedRoom,
@@ -175,7 +181,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [isAuthenticated, token, guestName, guestSessionId, location.pathname]);
 
     const joinRoom = (roomId: string, displayName: string, master: boolean, roomName?: string, options: any = {}) => {
-        console.log('[GameContext] joinRoom called', { roomId, socketId: socket?.id, isConnected: socket?.connected });
         if (!socket) {
             console.warn('[GameContext] joinRoom aborted: No socket');
             return;
@@ -258,22 +263,22 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const setIssues = (issues: any[]) => {
-        console.log('[setIssues] Called with', issues?.length, 'issues', 'socket:', !!socket, 'room:', !!room);
+
         if (!socket || !room) {
             console.warn('[setIssues] No socket or room, returning early');
             return;
         }
-        console.log('[setIssues] Emitting set_issues event', { roomId: room.roomId, count: issues?.length });
+
         socket.emit('set_issues', { roomId: room.roomId, issues });
     };
 
     const assignPoints = (issueKey: string, points: string | number) => {
-        console.log('[assignPoints] Called with:', { issueKey, points, hasSocket: !!socket, hasRoom: !!room });
+
         if (!socket || !room) {
             console.warn('[assignPoints] No socket or room, returning early');
             return;
         }
-        console.log('[assignPoints] Emitting assign_points event', { roomId: room.roomId, issueKey, points });
+
         socket.emit('assign_points', { roomId: room.roomId, issueKey, points });
     };
 

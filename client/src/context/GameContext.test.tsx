@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, act } from '@testing-library/react';
 import { GameProvider, useGame } from './GameContext';
 import { io } from 'socket.io-client';
 
@@ -20,6 +20,10 @@ const TestComponent = () => {
     return <div>{isConnected ? 'Connected' : 'Disconnected'}</div>;
 };
 
+import { MemoryRouter } from 'react-router-dom';
+
+// ... imports
+
 describe('GameContext', () => {
     let mockSocket: any;
 
@@ -30,35 +34,48 @@ describe('GameContext', () => {
             emit: vi.fn(),
             disconnect: vi.fn(),
             connect: vi.fn(),
+            connected: false
         };
         vi.mocked(io).mockReturnValue(mockSocket);
     });
 
-    it('connects to socket with token on mount', () => {
+    it('connects to socket with token on mount', async () => {
         render(
-            <GameProvider>
-                <TestComponent />
-            </GameProvider>
+            <MemoryRouter initialEntries={['/room/123']}>
+                <GameProvider>
+                    <TestComponent />
+                </GameProvider>
+            </MemoryRouter>
         );
 
-        expect(io).toHaveBeenCalledWith(expect.stringContaining('localhost'), {
-            auth: { token: 'test-token' }
+        await waitFor(() => {
+            expect(io).toHaveBeenCalledWith(expect.stringContaining('localhost'), {
+                auth: { token: 'test-token' }
+            });
         });
     });
 
     it('handles connection events', async () => {
         render(
-            <GameProvider>
-                <TestComponent />
-            </GameProvider>
+            <MemoryRouter initialEntries={['/room/123']}>
+                <GameProvider>
+                    <TestComponent />
+                </GameProvider>
+            </MemoryRouter>
         );
 
-        // Simulate 'connect' event
-        const connectHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'connect')[1];
-        connectHandler(); // Trigger callback
+        await waitFor(() => {
+            expect(io).toHaveBeenCalled();
+        });
 
-        // Not easily testable via UI without waitFor or state exposing, relying on internal state update
-        // But we can check if error is cleared or specific side effects
+        // Simulate 'connect' event
+        const connectHandler = mockSocket.on.mock.calls.find((call: any[]) => call[0] === 'connect')?.[1];
+
+        if (connectHandler) {
+            act(() => {
+                connectHandler();
+            });
+        }
     });
 
     it('does not connect if not authenticated', () => {
@@ -69,9 +86,11 @@ describe('GameContext', () => {
         } as any);
 
         render(
-            <GameProvider>
-                <TestComponent />
-            </GameProvider>
+            <MemoryRouter initialEntries={['/room/123']}>
+                <GameProvider>
+                    <TestComponent />
+                </GameProvider>
+            </MemoryRouter>
         );
 
         expect(io).not.toHaveBeenCalled();

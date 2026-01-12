@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { GameRoomPage } from './pages/GameRoomPage';
 import { GuestJoinPage } from './pages/GuestJoinPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 function App() {
   return (
@@ -27,6 +28,12 @@ function App() {
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/boards/:boardId/settings" element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             } />
 

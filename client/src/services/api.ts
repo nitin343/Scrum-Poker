@@ -122,5 +122,21 @@ export const api = {
                 method: 'DELETE',
             });
         }
+    },
+    ai: {
+        getBoardContext: async (boardId: string) => {
+            return fetchWithAuth(`/ai/boards/${boardId}/context`);
+        },
+        saveBoardContext: async (boardId: string, payload: { projectContext: string, backendRepoUrl: string, frontendRepoUrl: string }) => {
+            return fetchWithAuth(`/ai/boards/${boardId}/context`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+        },
+        analyzeCodebase: async (boardId: string) => {
+            return fetchWithAuth(`/ai/boards/${boardId}/analyze`, {
+                method: 'POST'
+            });
+        }
     }
 };

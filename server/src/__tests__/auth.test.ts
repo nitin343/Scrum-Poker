@@ -82,6 +82,9 @@ describe('Auth Routes', () => {
                 });
 
             expect(res.status).toBe(201);
+            expect(res.body.token).toBeDefined();
+            expect(res.body.user.email).toBe('invitee@test.com');
+            expect(res.body.user.inviteCode).toBeDefined();
 
             // Verify invitedBy is set
             const newUser = await Admin.findOne({ email: 'invitee@test.com' });
@@ -99,6 +102,10 @@ describe('Auth Routes', () => {
                 });
 
             expect(res.status).toBe(201);
+            expect(res.body.token).toBeDefined();
+            expect(res.body.user.email).toBe('newuser@test.com');
+            expect(res.body.user.inviteCode).toBeDefined();
+
             expect(res.body.user.companyId).toBe(seedAdmin.companyId);
         });
 

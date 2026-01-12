@@ -15,10 +15,10 @@ beforeAll(async () => {
     if (mongoUri && mongoose.connection.readyState === 0) {
         await mongoose.connect(mongoUri);
     }
-});
+}, 30000); // 30 second timeout for MongoDB connection
 
 afterAll(async () => {
     if (mongoose.connection.readyState !== 0) {
         await mongoose.connection.close();
     }
-});
+}, 30000); // 30 second timeout for cleanup

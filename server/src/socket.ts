@@ -13,6 +13,8 @@ import {
 import { sessionService } from './services/SessionService';
 import { jiraService } from './services/JiraService';
 import { logger } from './utils/logger/Logger';
+import Sprint from './models/Sprint';
+import { setupChatHandlers } from './socket/chatHandlers';
 
 export const setupSocket = (io: Server) => {
     // Helper: Fetch Issue Data (Jira + DB)
@@ -46,17 +48,45 @@ export const setupSocket = (io: Server) => {
 
             // Merge
             if (jiraIssue && jiraIssue.fields) {
+                // --- USER REQUESTED DETAILED LOGS ---
+                logger.debug(`Fetched Jira issue: ${jiraIssue.key}`);
+
+                const descSource = jiraIssue.renderedFields?.description ? 'Rendered' : (typeof jiraIssue.fields.description === 'string' ? 'Raw String' : 'None/ADF');
+
+
                 const fullIssue: CurrentIssue = {
                     issueKey: jiraIssue.key || issueStub.issueKey,
                     issueId: jiraIssue.id,
                     summary: jiraIssue.fields.summary || issueStub.summary,
+                    description: jiraIssue.renderedFields?.description || (typeof jiraIssue.fields.description === 'string' ? jiraIssue.fields.description : '') || '', // Prioritize HTML, avoid ADF objects
                     issueType: jiraIssue.fields.issuetype ? jiraIssue.fields.issuetype.name : 'Story',
                     assignee: jiraIssue.fields.assignee ? {
                         accountId: jiraIssue.fields.assignee.accountId || 'unknown',
                         displayName: jiraIssue.fields.assignee.displayName || 'Unknown'
                     } : undefined,
                     currentPoints: jiraIssue.fields.customfield_10106, // Story Points
-                    timeEstimate: (jiraIssue.fields as any).timetracking?.originalEstimate // Time Estimate
+                    timeEstimate: (jiraIssue.fields as any).timetracking?.originalEstimate, // Time Estimate
+                    comments: (jiraIssue.fields as any).comment?.comments?.map((c: any) => ({
+                        author: c.author.displayName,
+                        body: c.body,
+                        created: c.created
+                    })) || [],
+                    attachments: (jiraIssue.fields as any).attachment?.map((a: any) => ({
+                        filename: a.filename,
+                        author: a.author.displayName,
+                        created: a.created,
+                        url: a.content
+                    })) || [],
+                    issuelinks: (jiraIssue.fields as any).issuelinks?.map((l: any) => ({
+                        type: l.type.name,
+                        outwardIssue: l.outwardIssue ? { key: l.outwardIssue.key, summary: l.outwardIssue.fields.summary, status: l.outwardIssue.fields.status } : undefined,
+                        inwardIssue: l.inwardIssue ? { key: l.inwardIssue.key, summary: l.inwardIssue.fields.summary, status: l.inwardIssue.fields.status } : undefined
+                    })) || [],
+                    // --- Enhanced Context ---
+                    status: jiraIssue.fields.status?.name || 'Unknown',
+                    reporter: jiraIssue.fields.reporter?.displayName || 'Unknown',
+                    priority: (jiraIssue.fields as any).priority?.name || 'None',
+                    labels: (jiraIssue.fields as any).labels || []
                 };
                 return { fullIssue, votingHistory };
             } else {
@@ -67,8 +97,9 @@ export const setupSocket = (io: Server) => {
                     summary: issueStub.summary,
                     issueType: 'Story', // fallback
                     assignee: undefined,
-                    currentPoints: undefined,
-                    timeEstimate: undefined
+                    currentPoints: undefined, // Story Points
+                    timeEstimate: undefined, // Time Estimate
+                    description: '' // Fallback empty description
                 };
                 return { fullIssue, votingHistory };
             }
@@ -98,7 +129,7 @@ export const setupSocket = (io: Server) => {
 
         // CLEANUP: Remove ghost participants (offline users from previous history)
         for (const [id, p] of room.participants) {
-            if (!p.isConnected) {
+            if (!p.isConnected && id !== 'ai-bot') { // Keep AI Bot
                 room.participants.delete(id);
             }
         }
@@ -111,6 +142,11 @@ export const setupSocket = (io: Server) => {
         let cached = room.issueCache.get(issueStub.issueKey);
         // If cache is older than 5 minutes, invalidate
         if (cached && (Date.now() - cached.timestamp > 5 * 60 * 1000)) {
+            cached = undefined;
+        }
+        // Force refresh if cache is "shallow" (missing comments/attachments from full fetch)
+        if (cached && !cached.data.comments) {
+            logger.debug(`[SOCKET] Cache for ${issueStub.issueKey} is shallow (missing details). Forcing refresh.`);
             cached = undefined;
         }
 
@@ -132,6 +168,7 @@ export const setupSocket = (io: Server) => {
                 issueKey: issueStub.issueKey,
                 issueId: issueStub.issueId || 'pending',
                 summary: issueStub.summary,
+                description: '', // Default empty for stub
                 issueType: 'Story' // Default to Story for stub (until full load)
             };
 
@@ -150,7 +187,7 @@ export const setupSocket = (io: Server) => {
             // CLEANUP: Remove ghost participants (offline users from previous history)
             // Real users are removed on disconnect, so any !isConnected are ghosts.
             for (const [id, p] of room.participants) {
-                if (!p.isConnected) {
+                if (!p.isConnected && id !== 'ai-bot') {
                     room.participants.delete(id);
                 }
             }
@@ -178,6 +215,7 @@ export const setupSocket = (io: Server) => {
         room.currentIssue = fullIssue;
         room.currentIssueIndex = index;
         room.areCardsRevealed = false;
+        room.aiAnalysis = null; // Clear previous AI analysis
 
         // Reset all participants
         room.participants.forEach(p => {
@@ -185,13 +223,73 @@ export const setupSocket = (io: Server) => {
             p.hasVoted = false;
         });
 
+        // --- AI BOT LOGIC START ---
+        // Ensure AI Bot is in the room
+        if (!room.participants.has('ai-bot')) {
+            room.participants.set('ai-bot', {
+                odId: 'ai-bot',
+                socketId: 'ai-bot',
+                displayName: 'AI Co-pilot',
+                selectedCard: null,
+                hasVoted: false,
+                isScrumMaster: false,
+                isGuest: false,
+                isConnected: true, // Always "online"
+                isBot: true // New flag for UI to detect
+            });
+        }
+
+        // Trigger AI Analysis
+        const aiBot = room.participants.get('ai-bot');
+        if (aiBot) {
+            aiBot.hasVoted = false;
+            aiBot.selectedCard = null;
+
+            // Async call - don't await!
+            import('./services/AIService').then(({ aiService }) => {
+                // If the issue has points already, maybe we don't need to re-estimate?
+                // But for now, let's always estimate to give the "Reasoning"
+                logger.info(`[AI BOT] Analyzing ticket: ${fullIssue.issueKey}`);
+
+                // Pass full ticket data to AI
+                // We need to shape it like ITicket or passing the fields manually
+                // Since ITicket structure in Sprint.ts matches mostly, we'll map fields
+                const ticketData: any = {
+                    issueKey: fullIssue.issueKey,
+                    summary: fullIssue.summary,
+                    description: fullIssue.description || 'No description provided.',
+                    // Add other fields if needed by AI service
+                };
+
+                aiService.estimateTicket(ticketData, room.boardId || '').then(estimate => {
+                    if (estimate) {
+                        logger.info(`[AI BOT] Estimate ready: ${estimate.story_points}`);
+
+                        // Update Bot State
+                        aiBot.selectedCard = estimate.story_points;
+                        aiBot.hasVoted = true;
+
+                        // Store Reasoning for Reveal phase
+                        room.aiAnalysis = estimate;
+
+                        // Emit "Vote Cast" event so UI shows the green checkmark
+                        io.to(roomId).emit('vote_update', { odId: 'ai-bot', hasVoted: true });
+                        io.to(roomId).emit('room_update', { ...room, participants: Array.from(room.participants.values()) }); // Full sync
+                    }
+                }).catch(err => {
+                    logger.error('[AI BOT] Failed to estimate', err);
+                });
+            });
+        }
+        // --- AI BOT LOGIC END ---
+
         // 4. Apply History (Merge Logic)
         if (votingHistory) {
-            console.log('[SOCKET] Applying Voting History:', JSON.stringify(votingHistory));
+            logger.debug(`[SOCKET] Applying Voting History: ${JSON.stringify(votingHistory)}`);
             room.areCardsRevealed = true; // Show results immediately
 
             votingHistory.votes.forEach((vote: any) => {
-                console.log('[SOCKET] Processing vote:', { participantId: vote.participantId, participantName: vote.participantName, vote: vote.vote });
+
                 const p = room.participants.get(vote.participantId);
 
                 // If p is found (Online), restore their vote.
@@ -222,14 +320,7 @@ export const setupSocket = (io: Server) => {
         const hasVotingHistory = !!(votingHistory && votingHistory.votes && votingHistory.votes.length > 0);
         const isPreEstimated = hasExistingEstimate && !hasVotingHistory;
 
-        console.log('\n========== [PRE-ESTIMATED CHECK] ==========');
-        console.log('[PRE-EST] Issue:', fullIssue.issueKey);
-        console.log('[PRE-EST] currentPoints:', fullIssue.currentPoints);
-        console.log('[PRE-EST] timeEstimate:', fullIssue.timeEstimate);
-        console.log('[PRE-EST] hasExistingEstimate:', hasExistingEstimate);
-        console.log('[PRE-EST] hasVotingHistory:', hasVotingHistory);
-        console.log('[PRE-EST] isPreEstimated:', isPreEstimated);
-        console.log('========== [/PRE-ESTIMATED CHECK] ==========\n');
+
 
         // 5. Emit Events
         const savedInJira = !!(votingHistory && votingHistory.updatedInJira);
@@ -275,9 +366,12 @@ export const setupSocket = (io: Server) => {
     io.on('connection', (socket: Socket) => {
         logger.info('User connected', { socketId: socket.id });
 
+        // Initialize Chat Handlers
+        setupChatHandlers(io, socket);
+
         // JOIN ROOM
         socket.on('join_room', async (payload) => {
-            console.log('[SOCKET] join_room payload:', JSON.stringify(payload));
+            logger.info('[SOCKET] join_room payload:', JSON.stringify(payload));
             try {
                 const { roomId, odId, displayName, isScrumMaster, roomName, boardId, sprintId, sprintName, companyId } = payload;
                 logger.info('[JOIN_ROOM] Processing join request', { roomId, odId });
@@ -425,46 +519,28 @@ export const setupSocket = (io: Server) => {
         // NEXT ISSUE
         socket.on('next_issue', async ({ roomId }) => {
             try {
-                console.log('[NEXT_ISSUE] Received:', { roomId });
                 const room = getRoom(roomId);
-                if (!room) {
-                    console.log('[NEXT_ISSUE] Room not found');
-                    return;
-                }
-                if (room.currentIssueIndex >= room.totalIssues - 1) {
-                    console.log('[NEXT_ISSUE] Already at last issue');
-                    return;
-                }
+                if (!room) return;
+
                 const nextIndex = room.currentIssueIndex + 1;
-                console.log('[NEXT_ISSUE] Loading issue', nextIndex);
+                logger.debug(`[NEXT_ISSUE] Loading issue ${nextIndex}`);
                 await loadAndBroadcastIssue(roomId, nextIndex);
-                console.log('[NEXT_ISSUE] Completed');
             } catch (error) {
                 logger.error('[NEXT_ISSUE] Error:', error);
-                console.error('[NEXT_ISSUE] Error:', error);
             }
         });
 
         // PREV ISSUE
         socket.on('prev_issue', async ({ roomId }) => {
             try {
-                console.log('[PREV_ISSUE] Received:', { roomId });
                 const room = getRoom(roomId);
-                if (!room) {
-                    console.log('[PREV_ISSUE] Room not found');
-                    return;
-                }
-                if (room.currentIssueIndex <= 0) {
-                    console.log('[PREV_ISSUE] Already at first issue');
-                    return;
-                }
+                if (!room) return;
+
                 const prevIndex = room.currentIssueIndex - 1;
-                console.log('[PREV_ISSUE] Loading issue', prevIndex);
+                logger.debug(`[PREV_ISSUE] Loading issue ${prevIndex}`);
                 await loadAndBroadcastIssue(roomId, prevIndex);
-                console.log('[PREV_ISSUE] Completed');
             } catch (error) {
                 logger.error('[PREV_ISSUE] Error:', error);
-                console.error('[PREV_ISSUE] Error:', error);
             }
         });
 
@@ -496,49 +572,26 @@ export const setupSocket = (io: Server) => {
             }
         });
 
-        // REVEAL CARDS (and Save Round History per User Req)
+        // REVEAL CARDS (and Save Round History)
         socket.on('reveal_cards', async ({ roomId }) => {
-            console.log('\n========== [REVEAL CARDS] ==========');
-            console.log('[REVEAL] reveal_cards event received', { roomId });
+            logger.info('[REVEAL] reveal_cards event received', { roomId });
 
             const room = getRoom(roomId);
-            if (!room) {
-                console.log('[REVEAL] ❌ Room not found', { roomId });
-                return;
-            }
-            if (!room.currentIssue) {
-                console.log('[REVEAL] ❌ No current issue in room', { roomId });
+            if (!room || !room.currentIssue) {
+                logger.warn('[REVEAL] Room or Issue not found', { roomId });
                 return;
             }
 
             room.areCardsRevealed = true;
-            console.log('[REVEAL] Current issue:', room.currentIssue.issueKey);
 
-            // Collect votes from participants
-            const allParticipants = Array.from(room.participants.values());
-            console.log('[REVEAL] All participants:');
-            allParticipants.forEach(p => {
-                console.log(`   - odId: ${p.odId}, name: ${p.displayName}, hasVoted: ${p.hasVoted}, card: ${p.selectedCard}`);
-            });
-
-            // User Request: "Update sprints table... under its ticket number"
+            // Save to DB logic
             try {
-                const Sprint = (await import('./models/Sprint')).default;
-                console.log('[REVEAL] Searching for Sprint with ticket:', room.currentIssue.issueKey);
-
                 const sprint = await Sprint.findOne({ "tickets.issueKey": room.currentIssue.issueKey });
 
-                if (!sprint) {
-                    console.log('[REVEAL] ⚠️ Sprint NOT FOUND for issueKey:', room.currentIssue.issueKey);
-                } else {
-                    console.log('[REVEAL] ✅ Sprint found:', sprint.sprintId, 'with', sprint.tickets.length, 'tickets');
-
+                if (sprint) {
                     const ticket = sprint.tickets.find(t => t.issueKey === room.currentIssue!.issueKey);
-                    if (!ticket) {
-                        console.log('[REVEAL] ⚠️ Ticket NOT FOUND in sprint tickets array');
-                    } else {
-                        console.log('[REVEAL] ✅ Ticket found:', ticket.issueKey);
-
+                    if (ticket) {
+                        const allParticipants = Array.from(room.participants.values());
                         const votes = allParticipants
                             .filter(p => p.hasVoted && p.selectedCard && p.odId)
                             .map(p => ({
@@ -548,11 +601,7 @@ export const setupSocket = (io: Server) => {
                                 votedAt: new Date()
                             }));
 
-                        console.log('[REVEAL] Votes to save:', JSON.stringify(votes, null, 2));
-
-                        if (votes.length === 0) {
-                            console.log('[REVEAL] ⚠️ No valid votes to save! Check participant odId values.');
-                        } else {
+                        if (votes.length > 0) {
                             ticket.votingRounds.push({
                                 roundNumber: room.currentRound,
                                 votes: votes,
@@ -560,21 +609,19 @@ export const setupSocket = (io: Server) => {
                                 updatedInJira: false
                             });
                             await sprint.save();
-                            console.log('[REVEAL] ✅ Successfully saved voting round to DB');
-                            console.log('[REVEAL] Ticket now has', ticket.votingRounds.length, 'voting rounds');
+                            logger.info('[REVEAL] Saved voting round to DB');
                         }
                     }
                 }
             } catch (e: any) {
-                console.log('[REVEAL] ❌ Failed to save round history:', e.message);
+                logger.error('[REVEAL] Failed to save round history:', e);
             }
 
             io.to(roomId).emit('cards_revealed', {
                 participants: Array.from(room.participants.values()),
                 currentIssue: room.currentIssue
             });
-            console.log('[REVEAL] cards_revealed event emitted');
-            console.log('========== [/REVEAL CARDS] ==========\n');
+            logger.info('[REVEAL] cards_revealed event emitted');
         });
 
         // RESET ROUND

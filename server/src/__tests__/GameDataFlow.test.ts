@@ -12,6 +12,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import Client, { Socket as ClientSocket } from 'socket.io-client';
 import { setupSocket } from '../socket';
+import { rooms } from '../store';
 import { AddressInfo } from 'net';
 import mongoose from 'mongoose';
 
@@ -29,6 +30,10 @@ const mocks = vi.hoisted(() => ({
     },
     sessionService: {
         getSession: vi.fn()
+    },
+    aiService: {
+        estimateTicket: vi.fn(),
+        mockEstimate: vi.fn() // Add checking for mockEstimate too if used
     }
 }));
 
@@ -49,15 +54,21 @@ vi.mock('../services/SessionService', () => ({
     sessionService: mocks.sessionService
 }));
 
+// Mock AIService
+vi.mock('../services/AIService', () => ({
+    aiService: mocks.aiService
+}));
+
 describe('Game Room Data Flow Integration', () => {
     let io: Server;
     let scrumMasterSocket: ClientSocket;
-    let participantSocket: ClientSocket;
+    let participantSocket: ClientSocket | undefined;
     let httpServer: any;
     let port: number;
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        rooms.clear();
 
         // Reset mock data
         mocks.sprintData.tickets = [{
@@ -67,6 +78,14 @@ describe('Game Room Data Flow Integration', () => {
             votingRounds: []
         }];
         mocks.sprintData.save.mockResolvedValue(true);
+
+        // Mock AI Service default response
+        mocks.aiService.estimateTicket.mockResolvedValue({
+            story_points: 5,
+            confidence: 85,
+            reasoning: 'Test reasoning',
+            risks: ['None']
+        });
 
         // Setup Test Server
         httpServer = createServer();
@@ -141,6 +160,7 @@ describe('Game Room Data Flow Integration', () => {
             });
 
             scrumMasterSocket.on('vote_update', ({ odId, hasVoted }) => {
+                if (odId === 'ai-bot') return; // Ignore AI bot
                 expect(odId).toBe('voter-456');
                 expect(hasVoted).toBe(true);
                 resolve();
@@ -173,7 +193,17 @@ describe('Game Room Data Flow Integration', () => {
             odId: 'sm-789',
             card: 5
         });
-        await new Promise<void>(res => scrumMasterSocket.once('vote_update', res));
+
+        // Wait for specific user vote
+        await new Promise<void>((resolve) => {
+            const handler = (data: any) => {
+                if (data.odId === 'sm-789') {
+                    scrumMasterSocket.off('vote_update', handler);
+                    resolve();
+                }
+            };
+            scrumMasterSocket.on('vote_update', handler);
+        });
 
         // 4. Reveal Cards
         return new Promise<void>((resolve) => {
@@ -195,8 +225,10 @@ describe('Game Room Data Flow Integration', () => {
                 const round = mocks.sprintData.tickets[0].votingRounds[0];
                 expect(round.votes).toBeDefined();
                 expect(round.votes.length).toBeGreaterThan(0);
-                expect(round.votes[0].participantId).toBe('sm-789');
-                expect(round.votes[0].vote).toBe('5');
+
+                const userVote = round.votes.find((v: any) => v.participantId === 'sm-789');
+                expect(userVote).toBeDefined();
+                expect(userVote.vote).toBe('5');
 
                 resolve();
             });

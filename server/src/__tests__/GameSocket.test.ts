@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import Client, { Socket as ClientSocket } from 'socket.io-client';
 import { setupSocket } from '../socket';
+import { rooms } from '../store';
 import { AddressInfo } from 'net';
 
 // Use vi.hoisted to ensure mocks are available in vi.mock factories
@@ -18,6 +19,9 @@ const mocks = vi.hoisted(() => ({
     },
     sessionService: {
         getSession: vi.fn()
+    },
+    aiService: {
+        estimateTicket: vi.fn()
     }
 }));
 
@@ -36,6 +40,11 @@ vi.mock('../services/SessionService', () => ({
     sessionService: mocks.sessionService
 }));
 
+// Mock AIService
+vi.mock('../services/AIService', () => ({
+    aiService: mocks.aiService
+}));
+
 
 describe('GameSocket', () => {
     let io: Server;
@@ -45,11 +54,20 @@ describe('GameSocket', () => {
     beforeEach(async () => {
         // Reset Mocks
         vi.clearAllMocks();
+        rooms.clear();
 
         // Setup Test Server
         httpServer = createServer();
         io = new Server(httpServer);
         await setupSocket(io);
+
+        // Mock AI Service default response
+        mocks.aiService.estimateTicket.mockResolvedValue({
+            story_points: 5,
+            confidence: 85,
+            reasoning: 'Test reasoning',
+            risks: ['None']
+        });
 
         // Listen on random port
         await new Promise<void>((resolve) => httpServer.listen(() => resolve()));
@@ -127,7 +145,7 @@ describe('GameSocket', () => {
 
     it('should handle card selection and update vote status', async () => {
         // 1. Join
-        clientSocket.emit('join_room', { roomId: 'room-v', odId: 'voter-1', displayName: 'Voter', isScrumMaster: false });
+        clientSocket.emit('join_room', { roomId: 'room-v', odId: 'voter-1', displayName: 'Voter', isScrumMaster: true });
         await new Promise<void>(res => clientSocket.once('room_update', res));
 
         // 2. Mock Issue

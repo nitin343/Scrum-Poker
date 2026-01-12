@@ -12,6 +12,8 @@ import { IssueDisplay } from '../components/IssueDisplay';
 
 import { Toast } from '../components/Toast';
 
+import { BotAnalysisPanel } from '../components/BotAnalysisPanel';
+
 export function GameRoomPage() {
     const {
         room, isConnected, selectCard, revealCards, resetRound,
@@ -26,6 +28,18 @@ export function GameRoomPage() {
     const { isAuthenticated, user } = useAuth();
     const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState('');
+    const [showAiPanel, setShowAiPanel] = useState(false);
+
+    // Auto-show AI Panel on reveal
+    useEffect(() => {
+        if (room?.areCardsRevealed && room.aiAnalysis) {
+            setShowAiPanel(true);
+        } else {
+            setShowAiPanel(false);
+        }
+    }, [room?.areCardsRevealed, room?.aiAnalysis]);
+
+    const handleCloseAiPanel = () => setShowAiPanel(false);
 
     // Toast State
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
@@ -176,6 +190,18 @@ export function GameRoomPage() {
                 onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
             />
 
+            {/* AI Panel */}
+            <AnimatePresence>
+                {showAiPanel && (
+                    <BotAnalysisPanel
+                        analysis={room.aiAnalysis || null}
+                        isVisible={showAiPanel}
+                        onClose={handleCloseAiPanel}
+                        roomId={room.roomId}
+                    />
+                )}
+            </AnimatePresence>
+
             {/* === NAVBAR === */}
             <motion.nav
                 initial={{ y: -60, opacity: 0 }}
@@ -202,6 +228,17 @@ export function GameRoomPage() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        {/* AI Toggle Button */}
+                        {room.aiAnalysis && !showAiPanel && (
+                            <button
+                                onClick={() => setShowAiPanel(true)}
+                                className="glass px-3 py-1.5 rounded-full text-xs font-bold text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/10 transition-colors flex items-center gap-2"
+                            >
+                                <span className="text-lg">🤖</span>
+                                <span>View Analysis</span>
+                            </button>
+                        )}
+
                         {isScrumMaster && (
                             <button
                                 onClick={handleSyncJira}

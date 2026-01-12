@@ -52,6 +52,9 @@ export interface JiraIssue {
         customfield_10106?: number;
         issuetype: { name: string };
     };
+    renderedFields?: {
+        description: string;
+    };
 }
 
 class JiraService {
@@ -212,7 +215,7 @@ class JiraService {
 
     public async testConnection(): Promise<JiraConnectionResult> {
         try {
-            console.log('Testing Jira Connection...');
+            logger.info('Testing Jira Connection...');
             const client = this.getAxiosClient();
 
             const response = await this.retryRequest<AxiosResponse>(() => client.get('/api/2/myself'));
@@ -241,7 +244,7 @@ class JiraService {
 
     public async getBoards(): Promise<JiraBoard[]> {
         try {
-            console.log('\n📋 Fetching all JIRA boards...');
+            logger.info('Fetching all JIRA boards...');
             const client = this.getAxiosClient();
             let allBoards: JiraBoard[] = [];
             let startAt = 0;
@@ -263,23 +266,20 @@ class JiraService {
                 startAt += maxResults;
             }
 
-            console.log(`✅ Found ${allBoards.length} boards\n`);
-            allBoards.forEach((board: any, index: number) => {
-                console.log(`  ${index + 1}. [${board.id}] ${board.name} (${board.type})`);
-            });
+
 
             logger.info('Boards retrieved', { count: allBoards.length });
             return allBoards;
         } catch (error: any) {
             logger.error('Failed to get boards', { error: error.message, status: error.response?.status });
-            console.log(`\n❌ Failed to get boards: ${error.message}\n`);
+
             return [];
         }
     }
 
     public async getSprints(boardId: number): Promise<JiraSprint[]> {
         try {
-            console.log(`\n🏃 Fetching sprints from board ${boardId}...`);
+            logger.info(`Fetching sprints from board ${boardId}...`);
             const client = this.getAxiosClient();
             let allSprints: JiraSprint[] = [];
             let startAt = 0;
@@ -292,7 +292,7 @@ class JiraService {
 
                 // Debug Logging
                 const values = response.data?.values || [];
-                console.log(`[DEBUG] Page startAt=${startAt}, received ${values.length} sprints. IsLast=${response.data?.isLast}`);
+
 
                 if (values.length > 0) {
                     allSprints = allSprints.concat(values);
@@ -305,23 +305,20 @@ class JiraService {
                 startAt += maxResults;
             }
 
-            console.log(`✅ Found ${allSprints.length} sprints\n`);
-            allSprints.slice(0, 10).forEach((sprint: any, index: number) => {
-                console.log(`  ${index + 1}. [${sprint.id}] ${sprint.name} - ${sprint.state}`);
-            });
+
 
             logger.info('Sprints retrieved', { boardId, count: allSprints.length });
             return allSprints;
         } catch (error: any) {
             logger.error('Failed to get sprints', { boardId, error: error.message });
-            console.log(`\n❌ Failed to get sprints: ${error.message}\n`);
+
             return [];
         }
     }
 
     public async getSprintIssues(sprintId: number, maxResults: number = 100): Promise<JiraIssue[]> {
         try {
-            console.log(`\n📝 Fetching issues from sprint ${sprintId}...`);
+            logger.info(`Fetching issues from sprint ${sprintId}...`);
             const client = this.getAxiosClient();
             const jql = `sprint = ${sprintId}`;
 
@@ -335,24 +332,20 @@ class JiraService {
 
             const issues = response.data.issues || [];
 
-            console.log(`✅ Found ${response.data.total} issues\n`);
-            issues.slice(0, 10).forEach((issue: any, index: number) => {
-                console.log(`  ${index + 1}. ${issue.key}: ${issue.fields.summary.substring(0, 50)}`);
-                console.log(`     Status: ${issue.fields.status.name} | Assignee: ${issue.fields.assignee?.displayName || 'Unassigned'}`);
-            });
+
 
             logger.info('Sprint issues retrieved', { sprintId, count: issues.length });
             return issues;
         } catch (error: any) {
             logger.error('Failed to get sprint issues', { sprintId, error: error.message });
-            console.log(`\n❌ Failed to get sprint issues: ${error.message}\n`);
+
             return [];
         }
     }
 
     public async getProjectUsers(projectKey: string): Promise<Map<string, string>> {
         try {
-            console.log(`\n👥 Fetching users from project ${projectKey}...`);
+            logger.info(`Fetching users from project ${projectKey}...`);
             const client = this.getAxiosClient();
             const jql = `project = ${projectKey} ORDER BY updated DESC`;
 
@@ -376,50 +369,44 @@ class JiraService {
                 }
             });
 
-            console.log(`✅ Found ${users.size} unique users\n`);
-            Array.from(users.values()).slice(0, 15).forEach((name: string, index: number) => {
-                console.log(`  ${index + 1}. ${name}`);
-            });
+
 
             logger.info('Project users retrieved', { projectKey, count: users.size });
             return users;
         } catch (error: any) {
             logger.error('Failed to get project users', { projectKey, error: error.message });
-            console.log(`\n❌ Failed to get project users: ${error.message}\n`);
+
             return new Map();
         }
     }
 
     public async getIssue(issueKey: string): Promise<JiraIssue | null> {
         try {
-            console.log(`\n🔍 Fetching issue ${issueKey}...`);
+            logger.debug(`Fetching issue ${issueKey}...`);
             const client = this.getAxiosClient();
 
             const response = await client.get(`/api/2/issue/${issueKey}`, {
                 params: {
-                    fields: 'summary,status,assignee,reporter,issuetype,customfield_10106,description,timetracking'
+                    fields: '*all', // Force ALL fields
+                    expand: 'renderedFields' // Get rendered HTML as backup
                 }
             });
 
             const issue = response.data;
-            console.log(`✅ Issue retrieved\n`);
-            console.log(`  Summary: ${issue.fields.summary}`);
-            console.log(`  Status: ${issue.fields.status.name}`);
-            console.log(`  Assignee: ${issue.fields.assignee?.displayName || 'Unassigned'}`);
-            console.log(`  Story Points: ${issue.fields.customfield_10106 || 'Not set'}`);
+
 
             logger.info('Issue retrieved', { issueKey });
             return issue;
         } catch (error: any) {
             logger.error('Failed to get issue', { issueKey, error: error.message });
-            console.log(`\n❌ Failed to get issue: ${error.message}\n`);
+
             return null;
         }
     }
 
     public async searchIssues(jql: string, maxResults: number = 50): Promise<JiraIssue[]> {
         try {
-            console.log(`\n🔎 Searching issues with JQL: ${jql}`);
+            logger.info(`Searching issues with JQL: ${jql}`);
             const client = this.getAxiosClient();
 
             const response = await client.get('/api/2/search', {
@@ -431,13 +418,13 @@ class JiraService {
             });
 
             const issues = response.data.issues || [];
-            console.log(`✅ Found ${response.data.total} issues (showing ${issues.length})\n`);
+
 
             logger.info('Issues searched', { jql, count: issues.length });
             return issues;
         } catch (error: any) {
             logger.error('Failed to search issues', { jql, error: error.message });
-            console.log(`\n❌ Failed to search issues: ${error.message}\n`);
+
             return [];
         }
     }
@@ -487,7 +474,7 @@ class JiraService {
 
     public async updateIssuePoints(issueKey: string, points: string | number, issueType: string): Promise<boolean> {
         try {
-            console.log(`\n📝 Updating ${issueType} ${issueKey} with ${points}...`);
+            logger.info(`Updating ${issueType} ${issueKey} with ${points}...`);
             const client = this.getAxiosClient();
 
             const isBug = issueType?.toLowerCase() === 'bug';
@@ -512,28 +499,28 @@ class JiraService {
             await client.put(`/api/2/issue/${issueKey}`, { fields: updatePayload });
 
             logger.info('Issue updated', { issueKey, points, issueType });
-            console.log(`✅ Issue ${issueKey} updated successfully\n`);
+            logger.info(`Issue ${issueKey} updated successfully`);
             return true;
         } catch (error: any) {
             logger.error('Failed to update issue points', { issueKey, error: error.message });
-            console.log(`\n❌ Failed to update issue points: ${error.message}\n`);
+
             return false;
         }
     }
 
     public async updateIssue(issueKey: string, fields: any): Promise<boolean> {
         try {
-            console.log(`\n📝 Updating issue ${issueKey}...`);
+            logger.info(`Updating issue ${issueKey}...`);
             const client = this.getAxiosClient();
 
             await client.put(`/api/2/issue/${issueKey}`, { fields });
 
             logger.info('Issue updated', { issueKey, fields });
-            console.log(`✅ Issue ${issueKey} updated successfully\n`);
+            logger.info(`Issue ${issueKey} updated successfully`);
             return true;
         } catch (error: any) {
             logger.error('Failed to update issue', { issueKey, error: error.message });
-            console.log(`\n❌ Failed to update issue: ${error.message}\n`);
+
             return false;
         }
     }

@@ -35,7 +35,7 @@ describe('AuthPage', () => {
 
     it('toggles to signup form', () => {
         renderAuthPage();
-        fireEvent.click(screen.getByText("Don't have an account? Join your team"));
+        fireEvent.click(screen.getByText("Join your team"));
 
         expect(screen.getByText('Join the Team')).toBeInTheDocument();
         expect(screen.getByPlaceholderText('Scrum Master Name')).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('AuthPage', () => {
 
         renderAuthPage();
         // Switch to signup
-        fireEvent.click(screen.getByText("Don't have an account? Join your team"));
+        fireEvent.click(screen.getByText("Join your team"));
 
         fireEvent.change(screen.getByPlaceholderText('Scrum Master Name'), { target: { value: 'New User' } });
         fireEvent.change(screen.getByPlaceholderText('XYZ-123'), { target: { value: 'INVITE' } });
